@@ -95,7 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     initSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'TOKEN_REFRESH_REVOKED') {
         setUser(null);
         setLoading(false);
@@ -103,7 +103,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (session?.user) {
-         await handleUserSession(session.user.id);
+         setLoading(true);
+         window.setTimeout(() => {
+           handleUserSession(session.user.id);
+         }, 0);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setLoading(false);
@@ -177,6 +180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await signOut();
             throw new Error(t('bannedAccountMessage'));
         }
+        await handleUserSession(data.user.id);
     }
   };
 
