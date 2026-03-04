@@ -31,7 +31,6 @@ const Profile: React.FC = () => {
   const [studentSearchQuery, setStudentSearchQuery] = useState(''); 
   const [searchStatus, setSearchStatus] = useState<string>('');
 
-  // Student Side State
   const [teacherSearchQuery, setTeacherSearchQuery] = useState('');
   const [foundTeacher, setFoundTeacher] = useState<UserProfile | null>(null);
   const [foundTeacherClasses, setFoundTeacherClasses] = useState<TeacherClass[]>([]);
@@ -43,7 +42,6 @@ const Profile: React.FC = () => {
   const [passwordError, setPasswordError] = useState('');
   const [verifyingPassword, setVerifyingPassword] = useState(false);
 
-  // Init Data
   useEffect(() => {
     if(user?.role === 'teacher') {
         loadClassesAndStudents();
@@ -95,11 +93,10 @@ const Profile: React.FC = () => {
       const cls = await getClasses();
       setClasses(cls);
 
-      // Extract all student IDs from all classes (ignore status for now to just get profile data)
       const allStudentIds = cls.flatMap(c => (c.students || []).map(s => s.id));
       
       if (allStudentIds.length > 0) {
-          // Only load non-banned profiles so banned users are excluded from class lists
+
           const { data } = await supabase.from('profiles').select('*').in('id', allStudentIds).eq('banned', false);
           if (data) {
               const profileMap: Record<string, UserProfile> = {};
@@ -118,7 +115,6 @@ const Profile: React.FC = () => {
 
   const loadMyClasses = async () => {
       const myCls = await getMyStudentClasses();
-      // Merge latest profile info for students in each class so displayed points/trophies are up-to-date
       const allStudentIds = Array.from(new Set(myCls.flatMap(c => (c.students || []).map(s => s.id))));
 
       if (allStudentIds.length === 0) {
@@ -172,7 +168,6 @@ const Profile: React.FC = () => {
       if (cls && user) {
           const success = await requestJoinClass(classId, cls.students || []);
           if (success) {
-              // Optimistic UI update after confirmed write
               setFoundTeacherClasses(prev => prev.map(c => 
                   c.id === classId ? { ...c, students: [...(c.students || []), { id: user.id, username: user.username, avatar_url: user.avatar_url, status: 'pending' as const }] } : c
               ));
@@ -214,7 +209,6 @@ const Profile: React.FC = () => {
   const currentClass = classes.find(c => c.id === selectedClassId);
   const currentMyClass = myClasses.find(c => c.id === selectedMyClassId);
 
-  // Legacy teacher add logic
   const handleAddStudent = async () => {
     if(!studentSearchQuery || !selectedClassId || !currentClass) return;
     
@@ -235,7 +229,7 @@ const Profile: React.FC = () => {
                 avatar_url: student.avatar_url,
                 total_points: student.total_points,
                 total_trophies: student.total_trophies,
-                status: 'approved' as const // Auto approve if teacher adds manually
+                status: 'approved' as const 
             }];
             
             const updatedClasses = classes.map(c => c.id === selectedClassId ? { ...c, students: updatedList } : c);
@@ -380,7 +374,7 @@ const Profile: React.FC = () => {
                                     const currentStudents = cls.students || [];
                                     const status = currentStudents.find(s => s.id === user.id)?.status;
                                     const isPending = status === 'pending';
-                                    const isJoined = status === 'approved' || (status === undefined && currentStudents.some(s => s.id === user.id)); // Legacy check
+                                    const isJoined = status === 'approved' || (status === undefined && currentStudents.some(s => s.id === user.id));
 
                                     return (
                                         <div key={cls.id} className="flex items-center justify-between p-3 bg-base/50 rounded-lg border border-white/5">
@@ -520,7 +514,7 @@ const Profile: React.FC = () => {
                                           return pB - pA;
                                       })
                                       .map((s) => {
-                                        // Use Fresh Data if available, else fallback to class data
+
                                         const freshData = studentProfiles[s.id] || s;
                                         
                                         return (

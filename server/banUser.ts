@@ -77,8 +77,7 @@ const hardDeleteUser = async (userId: string) => {
   await removeUserFromRooms(userId);
 };
 
-// POST /ban
-// body: { userId: string, ban: boolean }
+
 app.post('/ban', async (req, res) => {
   const { userId, ban } = req.body as { userId: string; ban?: boolean };
   if (!userId) return res.status(400).json({ error: 'userId required' });
@@ -103,12 +102,12 @@ app.post('/ban', async (req, res) => {
       try {
         await supabaseAdmin.from('auth.sessions').delete().eq('user_id', userId);
       } catch {
-        // ignore if not accessible
+        
       }
       try {
         await supabaseAdmin.from('auth.refresh_tokens').delete().eq('user_id', userId);
       } catch {
-        // ignore if not accessible
+        
       }
       await removeUserFromRooms(userId);
     }
@@ -120,8 +119,7 @@ app.post('/ban', async (req, res) => {
   }
 });
 
-// POST /delete-self
-// headers: Authorization: Bearer <access_token>
+
 app.post('/delete-self', async (req, res) => {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';

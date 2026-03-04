@@ -19,7 +19,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const generateEmail = (username: string) => `${username.toLowerCase().replace(/[^a-z0-9]/g, '')}@ingo.game`;
 
-// Helper: Compress Image via Canvas
 const compressImage = (file: File): Promise<Blob> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -34,7 +33,6 @@ const compressImage = (file: File): Promise<Blob> => {
         let width = img.width;
         let height = img.height;
 
-        // Maintain aspect ratio
         if (width > height) {
           if (width > maxWidth) {
             height *= maxWidth / width;
@@ -57,7 +55,6 @@ const compressImage = (file: File): Promise<Blob> => {
         
         ctx.drawImage(img, 0, 0, width, height);
         
-        // Export as JPEG with 0.7 quality
         ctx.canvas.toBlob((blob) => {
           if (blob) resolve(blob);
           else reject(new Error('Canvas to Blob failed'));
@@ -75,7 +72,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { t } = useLanguage();
 
   useEffect(() => {
-    // 1. Check active session on load
     const initSession = async () => {
       try {
         const { data, error } = await supabase.auth.getSession();
@@ -89,8 +85,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } catch (e: any) {
         console.error("Session check error", e);
-        // Fix for "Invalid Refresh Token" loop
-        // If the token is invalid, ensure we sign out to clear local storage
         if (e?.message && (e.message.includes("Refresh Token Not Found") || e.message.includes("Invalid Refresh Token"))) {
             await supabase.auth.signOut();
         }
@@ -101,18 +95,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     initSession();
 
-    // 2. Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'TOKEN_REFRESH_REVOKED') {
-        // Handle revoked token event specifically
         setUser(null);
         setLoading(false);
         return;
       }
 
       if (session?.user) {
-         // Note: We don't check 'user' state here to avoid closure staleness in useEffect([])
-         // Just blindly update session data if valid
          await handleUserSession(session.user.id);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -123,7 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => subscription.unsubscribe();
   }, []);
 
-  // 3. Realtime Ban Listener
+  // Ban Kontrol
   useEffect(() => {
       if (!user) return;
 
@@ -214,7 +204,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const email = generateEmail(username);
       
-      // Random Avatar Generation
+      // Random Avatar Sitesi
       const randomSeed = Math.random().toString(36).substring(7) + Date.now().toString();
       const avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${randomSeed}`;
 
@@ -259,12 +249,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const uploadAvatar = async (file: File): Promise<string | null> => {
       try {
-          // 1. Client-Side Compression & Resizing
-          // This fixes the "Mobile Upload Disconnect" issue by ensuring standard Blob format and small size
           const compressedBlob = await compressImage(file);
 
-          // 2. Upload Config
-          const fileName = `${Math.random()}.jpg`; // Force JPG extension
+          const fileName = `${Math.random()}.jpg`;
           const filePath = `${fileName}`;
 
           const { error: uploadError } = await supabase.storage
@@ -277,7 +264,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (uploadError) throw uploadError;
 
           const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
-          // Add a timestamp to bust cache if needed
           return `${data.publicUrl}?t=${Date.now()}`;
       } catch (error) {
           console.error("Avatar upload failed:", error);
@@ -288,7 +274,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateProfile = async (avatar: string, password?: string, avatarFile?: File | null) => {
       if (!user) return;
 
-      // Realtime can be reconnected opportunistically, but profile save must not depend on it.
       try { supabase.realtime.connect(); } catch {}
 
       let finalAvatar = avatar;

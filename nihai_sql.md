@@ -7,7 +7,6 @@ DROP TABLE IF EXISTS public.teacher_classes CASCADE;
 DROP TABLE IF EXISTS public.categories CASCADE;
 DROP TABLE IF EXISTS public.profiles CASCADE;
 
-
 -- 2. TABLOLARIN OLUŞTURULMASI
 -- 2.1 PROFILES (Kullanıcı Profilleri)
 CREATE TABLE public.profiles (
@@ -51,14 +50,13 @@ CREATE TABLE public.teacher_classes (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 3. STORAGE (Dosya Depolama)
 
+-- 3. STORAGE (Dosya Depolama)
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('avatars', 'avatars', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- 4. ROW LEVEL SECURITY (RLS) POLİTİKALARI
-
 -- RLS Aktifleştirme
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
@@ -67,6 +65,7 @@ ALTER TABLE public.teacher_classes ENABLE ROW LEVEL SECURITY;
 
 ------------------------------------------------------------------------
 ------------------------------------------------------------------------
+
 -- Profil tablosunda herkesin KENDİ profilini silebilmesini sağla
 DROP POLICY IF EXISTS "Users can delete own profile" ON profiles;
 CREATE POLICY "Users can delete own profile" 
@@ -132,7 +131,8 @@ CREATE POLICY "Teachers manage own classes"
 ON public.teacher_classes FOR ALL TO authenticated 
 USING (auth.uid() = teacher_id);
 
-
+------------------------------------------------------------------------
+------------------------------------------------------------------------
 -- Önce eski kısıtlayıcı politikaları temizleyelim (Çakışma olmasın diye)
 DROP POLICY IF EXISTS "Teachers manage own classes" ON public.teacher_classes;
 DROP POLICY IF EXISTS "Teachers can delete own classes" ON public.teacher_classes;
@@ -152,7 +152,6 @@ TO authenticated
 USING (auth.uid() = teacher_id)
 WITH CHECK (auth.uid() = teacher_id);
 
-
 -- 4.5 STORAGE POLİTİKALARI
 -- Avatar resimleri herkese açık
 DROP POLICY IF EXISTS "Avatar images are publicly accessible" ON storage.objects;
@@ -164,9 +163,7 @@ DROP POLICY IF EXISTS "Anyone can upload an avatar" ON storage.objects;
 CREATE POLICY "Anyone can upload an avatar" 
 ON storage.objects FOR INSERT WITH CHECK ( bucket_id = 'avatars' AND auth.role() = 'authenticated' );
 
-
 -- 5. OTOMASYON (TRIGGERS & FUNCTIONS)
-
 -- Yeni kullanıcı kaydolduğunda otomatik profil oluşturan fonksiyon
 CREATE OR REPLACE FUNCTION public.handle_new_user() 
 RETURNS TRIGGER AS $$
@@ -190,9 +187,7 @@ CREATE TRIGGER on_auth_user_created
 AFTER INSERT ON auth.users
 FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
-
 -- 6. REALTIME AYARLARI
-
 -- Odalar tablosundaki değişiklikleri anlık dinlemek için
 ALTER PUBLICATION supabase_realtime ADD TABLE public.rooms;
 

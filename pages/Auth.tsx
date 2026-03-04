@@ -29,7 +29,7 @@ const Auth: React.FC = () => {
         if (isLogin) {
             await signIn(formData.username, formData.password);
         } else {
-            // Avatar is handled in context randomly now
+            
             await register(formData.username, formData.password, role, formData.teacherKey);
         }
     } catch (err: any) {

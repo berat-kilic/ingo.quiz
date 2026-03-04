@@ -12,7 +12,7 @@ const LANG_STORAGE_KEY = 'ingo_language';
 
 const translations = {
   en: {
-    // Auth
+    // giriş
     welcome: 'Welcome',
     loginTitle: 'Login',
     registerTitle: 'Register',
@@ -34,7 +34,7 @@ const translations = {
     competitiveQuizArena: 'Competitive Quiz Arena',
     genericError: 'An error occurred.',
 
-    // Dashboard
+    // anasayfa
     leaderboard: 'Leaderboard',
     loadingLeaderboard: 'Loading leaderboard...',
     global: 'Global',
@@ -64,7 +64,7 @@ const translations = {
     editCategory: 'Edit Category',
     questionsCount: 'Questions',
 
-    // Category Modal
+    // katagori edit menü
     createCategory: 'New Category',
     categoryName: 'Category Name',
     gameMode: 'Game Mode',
@@ -79,7 +79,7 @@ const translations = {
     saveCategory: 'Save Category',
     newQuestion: 'New Question',
 
-    // Lobby
+    // Lobi
     roomCode: 'Room Code',
     waitingForPlayers: 'Waiting for players to join...',
     playersConnected: 'Players connected',
@@ -94,7 +94,7 @@ const translations = {
     bannedLabel: 'Banned',
     pts: 'pts',
 
-    // Game Arena
+    // oyun ekranı
     live: 'LIVE',
     submitAnswer: 'Lock Answer',
     changeAnswer: 'Change Answer',
@@ -119,7 +119,7 @@ const translations = {
     hostExitGameWarning: 'The game has not finished. If you leave, all students will be removed and the room will close.',
     playerExitGameWarning: 'If you leave, points from this game will not be added to your profile. Are you sure?',
 
-    // Profile & Classes
+    // Profil ve sınıf
     back: 'Back',
     trophies: 'Trophies',
     points: 'Total Points',
@@ -159,7 +159,7 @@ const translations = {
     bannedCannotBeAdded: 'This user is banned and cannot be added to the class.',
     removeStudentConfirm: 'Are you sure you want to remove this student from the class?',
 
-    // Profile Settings
+    // Profil ayar menüsü
     selectImage: 'Select Image',
     min6CharsPlaceholder: 'Enter at least 6 characters',
     retypePasswordPlaceholder: 'Re-enter password',
@@ -169,7 +169,7 @@ const translations = {
     profileSettingsPasswordPrompt: 'For security, enter your current password.',
     verify: 'Verify',
 
-    // Settings
+    // ayarlar
     preferences: 'Preferences',
     soundEffects: 'Sound Effects',
     music: 'Music',
@@ -179,11 +179,11 @@ const translations = {
     deleteWarning: 'Once you delete your account, there is no going back.',
     deleteFailed: 'Could not delete. Please try again.',
 
-    // Roles
+    // rol
     role_student: 'Student',
     role_teacher: 'Teacher',
 
-    // System
+    // sistem
     loading: 'Loading...',
     noConnection: 'No Connection',
     connectionLost: 'Connection Lost',
@@ -193,7 +193,7 @@ const translations = {
     roomClosed: 'Room closed.',
     kickedByHost: 'You were removed by the room host.',
 
-    // Errors
+    // hatalar
     roomNotFound: 'Room not found!',
     gameAlreadyStarted: 'Game already started.',
     failedToJoinRoom: 'Failed to join room.',
@@ -213,7 +213,7 @@ const translations = {
     profileCreateFailed: 'Profile could not be created.',
   },
   tr: {
-    // Auth
+    // giriş
     welcome: 'Hoş geldiniz',
     loginTitle: 'Giriş Yap',
     registerTitle: 'Kayıt Ol',
@@ -235,7 +235,7 @@ const translations = {
     competitiveQuizArena: 'Rekabetçi Quiz Arenası',
     genericError: 'Bir hata oluştu.',
 
-    // Dashboard
+    // Anasayfa
     leaderboard: 'Liderlik Tablosu',
     loadingLeaderboard: 'Tablo yükleniyor...',
     global: 'Genel',
@@ -265,7 +265,7 @@ const translations = {
     editCategory: 'Kategoriyi Düzenle',
     questionsCount: 'Soru',
 
-    // Category Modal
+    // Katagori edit menü
     createCategory: 'Yeni Kategori',
     categoryName: 'Kategori Adı',
     gameMode: 'Oyun Modu',
@@ -280,7 +280,7 @@ const translations = {
     saveCategory: 'Kaydet',
     newQuestion: 'Yeni Soru',
 
-    // Lobby
+    // Lobi
     roomCode: 'Oda Kodu',
     waitingForPlayers: 'Oyuncuların katılması bekleniyor...',
     playersConnected: 'Oyuncu bağlı',
@@ -295,7 +295,7 @@ const translations = {
     bannedLabel: 'Yasaklı',
     pts: 'puan',
 
-    // Game Arena
+    // oyun ekranı
     live: 'CANLI',
     submitAnswer: 'Cevabı Kilitle',
     changeAnswer: 'Cevabı Değiştir',
@@ -320,7 +320,7 @@ const translations = {
     hostExitGameWarning: 'Oyun henüz sona ermedi. Ayrılırsanız tüm öğrenciler atılır ve oda kapanır.',
     playerExitGameWarning: 'Ayrılırsanız bu oyundan kazandığınız puanlar profilinize eklenmez. Emin misiniz?',
 
-    // Profile & Classes
+    // Profil ve sınıf
     back: 'Geri',
     trophies: 'Kupalar',
     points: 'Toplam Puan',
@@ -360,7 +360,7 @@ const translations = {
     bannedCannotBeAdded: 'Bu kullanıcı banlı olduğu için sınıfa eklenemez.',
     removeStudentConfirm: 'Bu öğrenciyi sınıftan çıkarmak istediğinize emin misiniz?',
 
-    // Profile Settings
+    // Profil ayar menüsü
     selectImage: 'Resim Seç',
     min6CharsPlaceholder: 'En az 6 karakter girin',
     retypePasswordPlaceholder: 'Şifreyi tekrar girin',
@@ -370,7 +370,7 @@ const translations = {
     profileSettingsPasswordPrompt: 'Güvenlik için mevcut şifrenizi girin.',
     verify: 'Doğrula',
 
-    // Settings
+    // Ayarlar
     preferences: 'Tercihler',
     soundEffects: 'Ses Efektleri',
     music: 'Müzik',
@@ -380,11 +380,11 @@ const translations = {
     deleteWarning: 'Hesabını sildikten sonra geri dönüş yoktur.',
     deleteFailed: 'Silinemedi. Lütfen tekrar deneyin.',
 
-    // Roles
+    // Rol
     role_student: 'Öğrenci',
     role_teacher: 'Öğretmen',
 
-    // System
+    // Sistem
     loading: 'Yükleniyor...',
     noConnection: 'Bağlantı Yok',
     connectionLost: 'Bağlantı Koptu',
@@ -394,7 +394,7 @@ const translations = {
     roomClosed: 'Oda kapatıldı.',
     kickedByHost: 'Oda sahibi tarafından atıldınız.',
 
-    // Errors
+    // hatalar
     roomNotFound: 'Oda bulunamadı!',
     gameAlreadyStarted: 'Oyun zaten başladı.',
     failedToJoinRoom: 'Odaya katılım başarısız.',
@@ -422,7 +422,7 @@ const getInitialLanguage = (): Language => {
     const stored = localStorage.getItem(LANG_STORAGE_KEY);
     if (stored === 'tr' || stored === 'en') return stored;
   } catch {
-    // no-op
+
   }
   if (typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('tr')) {
     return 'tr';
@@ -437,7 +437,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       localStorage.setItem(LANG_STORAGE_KEY, language);
     } catch {
-      // no-op
+
     }
   }, [language]);
 

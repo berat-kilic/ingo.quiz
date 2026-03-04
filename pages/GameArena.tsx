@@ -23,7 +23,6 @@ const GameArena: React.FC = () => {
   const [hasSelected, setHasSelected] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  // End Game State
   const [endGameTotalScores, setEndGameTotalScores] = useState<any[]>([]);
   const [loadingEndGame, setLoadingEndGame] = useState(false);
   const lastResolvedQuestionIdRef = useRef<string | null>(null);
@@ -36,7 +35,6 @@ const GameArena: React.FC = () => {
         return;
     }
     
-    // FETCH TOTAL SCORES IF GAME FINISHED
     if (room.status === 'finished') {
         setLoadingEndGame(true);
         const playerIds = room.players.map(p => p.id);
@@ -71,7 +69,6 @@ const GameArena: React.FC = () => {
     if (!room || room.status !== 'playing' || !timeExpired || !currentQuestion) return;
     if (lastResolvedQuestionIdRef.current === currentQuestion.id) return;
 
-    // Sync with the same result state used by the on-screen correct/incorrect indicator.
     if (typeof myPlayer?.last_answer_correct !== 'boolean') return;
 
     lastResolvedQuestionIdRef.current = currentQuestion.id;
@@ -126,7 +123,6 @@ const GameArena: React.FC = () => {
 
   if (!room) return null;
 
-  // --- END GAME SCREEN ---
   if (room.status === 'finished') {
       return (
           <div className="min-h-screen flex flex-col items-center justify-center p-4">
@@ -145,7 +141,7 @@ const GameArena: React.FC = () => {
                           </div>
                           <div className="space-y-2 max-h-[400px] overflow-y-auto">
                               {room.players
-                                .sort((a,b) => b.score - a.score) // High to Low
+                                .sort((a,b) => b.score - a.score) // çoktan aza
                                 .map((p, i) => (
                                   <div key={p.id} className={`flex items-center justify-between p-3 rounded-lg bg-white/5 ${i === 0 ? 'border border-yellow-400/80' : ''}`}>
                                       <div className="flex items-center gap-3">
@@ -175,8 +171,8 @@ const GameArena: React.FC = () => {
                                   <div className="flex justify-center p-4"><Loader2 className="animate-spin" /></div>
                               ) : (
                                   endGameTotalScores
-                                    .filter(p => p.role !== 'teacher') // Ensure teacher excluded
-                                    .sort((a,b) => b.total_points - a.total_points) // High to Low
+                                    .filter(p => p.role !== 'teacher') // Öğretmen liste dışı
+                                    .sort((a,b) => b.total_points - a.total_points) // çoktan aza
                                     .map((p, i) => (
                                     <div key={p.id} className={`flex items-center justify-between p-3 rounded-lg bg-white/5 ${i === 0 ? 'border border-yellow-400/80' : ''}`}>
                                         <div className="flex items-center gap-3">
@@ -213,11 +209,9 @@ const GameArena: React.FC = () => {
       );
   }
 
-  // --- GAME PLAYING SCREEN ---
 
   const isCorrect = myPlayer?.last_answer_correct === true;
   
-  // Sorted players for Live Leaderboard (Include Host)
   const rankedPlayers = [...room.players]
     .sort((a,b) => b.score - a.score);
 
@@ -404,7 +398,7 @@ const GameArena: React.FC = () => {
   );
 };
 
-// Reusable Scoreboard List
+
 const ScoreboardContent = ({ players, t }: { players: any[]; t: (key: string) => string }) => (
     <>
       <div className="flex items-center gap-2 mb-4 text-gray-400 border-b border-white/10 pb-2">

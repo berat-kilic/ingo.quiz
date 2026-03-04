@@ -5,12 +5,12 @@ import { useLanguage } from '../context/LanguageContext';
 
 export const ConnectionStatus: React.FC = () => {
   const { t } = useLanguage();
-  const [isConnected, setIsConnected] = useState(true); // Optimistic initial state
+  const [isConnected, setIsConnected] = useState(true);
   const [showReconnectPopup, setShowReconnectPopup] = useState(false);
-  const [reloadCheckTick, setReloadCheckTick] = useState(0);
+  const [reconnectCheckTick, setReconnectCheckTick] = useState(0);
   const prevConnectedRef = useRef(true);
-  const reloadTriggeredRef = useRef(false);
-  const reloadTimeoutRef = useRef<number | null>(null);
+  const reconnectTriggeredRef = useRef(false);
+  const reconnectTimeoutRef = useRef<number | null>(null);
   const hasConfirmedConnectionRef = useRef(false);
   const location = useLocation();
   const isGameArena = location.pathname === '/game';
@@ -23,8 +23,17 @@ export const ConnectionStatus: React.FC = () => {
     }
   };
 
+  const forceRealtimeReconnect = () => {
+    try {
+      supabase.realtime.disconnect();
+    } catch {
+      // no-op
+    }
+    supabase.realtime.connect();
+    window.dispatchEvent(new CustomEvent('ingo:realtime-reconnect'));
+  };
+
   useEffect(() => {
-    // 1. Force a subscription to keep the socket alive (Supabase v2 lazy connects)
     const pingChannel = supabase.channel('_ping_keepalive');
     pingChannel.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
@@ -34,7 +43,6 @@ export const ConnectionStatus: React.FC = () => {
       if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setIsConnected(false);
     });
 
-    // 2. Periodic Socket State Check
     const checkConnection = () => {
       const rawState = supabase.realtime.connectionState;
       const state = typeof rawState === 'string' ? rawState : '';
@@ -42,17 +50,14 @@ export const ConnectionStatus: React.FC = () => {
 
       if (normalizedState === 'open' || normalizedState === 'connecting') {
         setIsConnected(true);
-      } else {
-        if (normalizedState === 'closed' || normalizedState === 'disconnected') {
-          setIsConnected(false);
-          supabase.realtime.connect();
-        }
+      } else if (normalizedState === 'closed' || normalizedState === 'disconnected') {
+        setIsConnected(false);
+        supabase.realtime.connect();
       }
     };
 
     const intervalId = setInterval(checkConnection, 2000);
 
-    // 3. Event Listeners for Tab Switching
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         const rawState = supabase.realtime.connectionState;
@@ -67,7 +72,7 @@ export const ConnectionStatus: React.FC = () => {
     };
 
     const handleOnline = () => {
-      supabase.realtime.connect();
+      forceRealtimeReconnect();
       checkConnection();
     };
 
@@ -77,15 +82,14 @@ export const ConnectionStatus: React.FC = () => {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Initial trigger
     checkConnection();
     supabase.realtime.connect();
 
     return () => {
       clearInterval(intervalId);
-      if (reloadTimeoutRef.current !== null) {
-        window.clearTimeout(reloadTimeoutRef.current);
-        reloadTimeoutRef.current = null;
+      if (reconnectTimeoutRef.current !== null) {
+        window.clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('online', handleOnline);
@@ -95,7 +99,7 @@ export const ConnectionStatus: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const handleDraftReady = () => setReloadCheckTick((v) => v + 1);
+    const handleDraftReady = () => setReconnectCheckTick((v) => v + 1);
     window.addEventListener('ingo:profile-settings-file-ready', handleDraftReady);
     return () => window.removeEventListener('ingo:profile-settings-file-ready', handleDraftReady);
   }, []);
@@ -106,20 +110,17 @@ export const ConnectionStatus: React.FC = () => {
     }
 
     if (isConnected) {
-      reloadTriggeredRef.current = false;
-      if (reloadTimeoutRef.current !== null) {
-        window.clearTimeout(reloadTimeoutRef.current);
-        reloadTimeoutRef.current = null;
+      reconnectTriggeredRef.current = false;
+      if (reconnectTimeoutRef.current !== null) {
+        window.clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
     }
 
-    // Show popup only when connection drops during game.
     if (isGameArena && !isConnected && prevConnectedRef.current) {
       setShowReconnectPopup(true);
     }
 
-    // Outside game/profile-edit/settings: if page is open while disconnected, hard reload.
-    // This also covers returning from an exempt page while already disconnected.
     if (
       !isGameArena &&
       location.pathname !== '/settings' &&
@@ -127,27 +128,28 @@ export const ConnectionStatus: React.FC = () => {
       !isConnected &&
       hasConfirmedConnectionRef.current
     ) {
-      if (!reloadTriggeredRef.current) {
-        reloadTriggeredRef.current = true;
-        reloadTimeoutRef.current = window.setTimeout(() => {
+      if (!reconnectTriggeredRef.current) {
+        reconnectTriggeredRef.current = true;
+        reconnectTimeoutRef.current = window.setTimeout(() => {
+          forceRealtimeReconnect();
           const rawState = supabase.realtime.connectionState;
           const state = (typeof rawState === 'string' ? rawState : '').toLowerCase();
           if (state !== 'open' && state !== 'connecting') {
-            window.location.reload();
+            supabase.realtime.connect();
           } else {
-            reloadTriggeredRef.current = false;
+            reconnectTriggeredRef.current = false;
           }
-          reloadTimeoutRef.current = null;
+          reconnectTimeoutRef.current = null;
         }, 1500);
       }
     }
 
     prevConnectedRef.current = isConnected;
-  }, [isConnected, isGameArena, location.pathname, reloadCheckTick]);
+  }, [isConnected, isGameArena, location.pathname, reconnectCheckTick]);
 
   const reconnectNow = () => {
     setShowReconnectPopup(false);
-    supabase.realtime.connect();
+    forceRealtimeReconnect();
   };
 
   return (

@@ -8,8 +8,8 @@ export interface Profile {
   role: Role;
   total_points: number;
   total_trophies: number;
-  created_at?: string; // Kayıt tarihi
-  banned?: boolean; // Yasaklı durumu (Kara liste)
+  created_at?: string;
+  banned?: boolean;
 }
 
 export interface TeacherClass {
@@ -23,7 +23,7 @@ export interface TeacherClass {
     total_points?: number;
     total_trophies?: number;
     banned?: boolean;
-    status?: 'pending' | 'approved'; // New field for join requests
+    status?: 'pending' | 'approved';
   }[];
 }
 
@@ -32,10 +32,10 @@ export type QuestionType = 'multiple-choice' | 'text' | 'estimation';
 export interface Question {
   id: string;
   text: string;
-  options?: string[]; // For multiple choice
+  options?: string[];
   correctAnswer: string;
   type: QuestionType;
-  duration?: number; // Optional now, controlled by room settings
+  duration?: number;
 }
 
 export interface Category {
@@ -66,6 +66,6 @@ export interface RoomPlayer {
   avatar_url?: string;
   score: number;
   is_host: boolean;
-  last_answer_correct?: boolean | null; // Track round status
-  last_answer_val?: string; // Track what they wrote (optional)
+  last_answer_correct?: boolean | null;
+  last_answer_val?: string;
 }

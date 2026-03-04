@@ -41,7 +41,7 @@ const ProfileSettings: React.FC = () => {
     try {
       sessionStorage.setItem('ingo_profile_settings_file_busy', '1');
     } catch {
-      // no-op
+      
     }
   };
 
@@ -49,7 +49,7 @@ const ProfileSettings: React.FC = () => {
     try {
       sessionStorage.removeItem('ingo_profile_settings_file_busy');
     } catch {
-      // no-op
+      
     }
     window.dispatchEvent(new CustomEvent('ingo:profile-settings-file-ready'));
   };
@@ -78,7 +78,7 @@ const ProfileSettings: React.FC = () => {
       setPassword(draft.password || '');
       setConfirmPassword(draft.confirmPassword || '');
     } catch {
-      // no-op
+      
     }
   }, [draftKey, user]);
 
@@ -91,7 +91,7 @@ const ProfileSettings: React.FC = () => {
       };
       localStorage.setItem(draftKey, JSON.stringify(draft));
     } catch {
-      // no-op
+      
     }
   }, [draftKey, pendingAvatarDataUrl, password, confirmPassword]);
 
@@ -103,7 +103,6 @@ const ProfileSettings: React.FC = () => {
 
   useEffect(() => {
     const onFocus = () => {
-      // Mobile/desktop file picker cancel case: no onChange fires.
       if (!awaitingFilePickRef.current) return;
       setTimeout(() => {
         if (!awaitingFilePickRef.current) return;
@@ -152,7 +151,7 @@ const ProfileSettings: React.FC = () => {
     try {
       localStorage.removeItem(draftKey);
     } catch {
-      // no-op
+      
     }
     setPendingAvatarDataUrl(null);
     setPendingAvatarFile(null);

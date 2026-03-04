@@ -25,27 +25,22 @@ const Dashboard: React.FC = () => {
   const selfRowRef = useRef<HTMLDivElement | null>(null);
   const highlightTimeoutRef = useRef<number | null>(null);
 
-  // Loading States
   const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
 
-  // Modals
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   
-  // Notification / Requests
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [teacherClasses, setTeacherClasses] = useState<TeacherClass[]>([]);
   const [pendingRequests, setPendingRequests] = useState<{classId: string, className: string, student: any}[]>([]);
 
-  // Room Config
   const [roomConfig, setRoomConfig] = useState({
       category_id: '',
       questionCount: 10,
       timePerQuestion: 30
   });
 
-  // Category Config
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [newCategory, setNewCategory] = useState<{name: string, mode: 'multiple-choice' | 'text', questions: Question[]}>({
       name: '',
@@ -129,7 +124,6 @@ const Dashboard: React.FC = () => {
     if (isTeacher) {
         fetchRequests();
         
-        // Subscribe to changes in teacher_classes to update notifications in real-time
         notificationChannel = supabase.channel('dashboard_notifications')
             .on(
                 'postgres_changes', 
@@ -272,8 +266,7 @@ const Dashboard: React.FC = () => {
       if (!targetClass) return;
       
       await resolveClassRequest(classId, studentId, targetClass.students, approved);
-      // Local update is handled by realtime subscription or optimistic update could be added here
-      fetchRequests(); // Refresh manually to be safe
+      fetchRequests();
   };
 
   const handleLeaderboardDoubleClick = () => {

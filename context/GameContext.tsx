@@ -6,7 +6,6 @@ import { useAuth } from './AuthContext';
 import { useLanguage } from './LanguageContext';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
-// Helper: Levenshtein Distance
 const levenshteinDistance = (a: string, b: string): number => {
   const matrix = [];
   for (let i = 0; i <= b.length; i++) matrix[i] = [i];
@@ -18,8 +17,8 @@ const levenshteinDistance = (a: string, b: string): number => {
         matrix[i][j] = matrix[i - 1][j - 1];
       } else {
         matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1, // substitution
-          Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1) // insertion/deletion
+          matrix[i - 1][j - 1] + 1,
+          Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1)
         );
       }
     }
@@ -72,10 +71,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [timeExpired, setTimeExpired] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   
-  // To trigger re-subscription on visibility change
   const [subscriptionKey, setSubscriptionKey] = useState(0);
 
-  // Refs
   const roomRef = useRef<Room | null>(null);
   const questionsRef = useRef<Question[]>([]);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -83,7 +80,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const roundScoredRef = useRef<boolean>(false);
   const endGameUpdatedRef = useRef<boolean>(false);
 
-  // Sync refs
   useEffect(() => { roomRef.current = room; }, [room]);
   useEffect(() => { questionsRef.current = questions; }, [questions]);
 
@@ -93,7 +89,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ? questions[room.current_question_index] 
     : null;
 
-  // 1. Fetch Categories
   useEffect(() => {
     const fetchCategories = async () => {
         let query = supabase.from('categories').select('*');
@@ -106,38 +101,45 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user) fetchCategories();
   }, [user]);
 
-  // 1.5 Visibility Handler to force Resubscription AND Data Sync
   useEffect(() => {
-    const handleVisibility = async () => {
-        if (document.visibilityState === 'visible') {
-            // 1. Force Subscription Refresh
-            setSubscriptionKey(prev => prev + 1);
-            
-            // 2. IMPORTANT: Manually fetch latest room state via REST
-            // This covers the gap where the socket might be reconnecting
-            if (roomRef.current?.id) {
-                console.log("Tab visible: Syncing Room State via REST...");
-                const { data: freshRoom } = await supabase
-                    .from('rooms')
-                    .select('*')
-                    .eq('id', roomRef.current.id)
-                    .single();
-                
-                if (freshRoom) {
-                    setRoom(freshRoom as Room);
-                }
-            }
+    const resubscribeAndSyncRoom = async () => {
+      setSubscriptionKey(prev => prev + 1);
+
+      if (roomRef.current?.id) {
+        console.log("Syncing Room State via REST...");
+        const { data: freshRoom } = await supabase
+          .from('rooms')
+          .select('*')
+          .eq('id', roomRef.current.id)
+          .single();
+
+        if (freshRoom) {
+          setRoom(freshRoom as Room);
         }
+      }
     };
+
+    const handleVisibility = async () => {
+      if (document.visibilityState === 'visible') {
+        await resubscribeAndSyncRoom();
+      }
+    };
+
+    const handleRealtimeReconnect = async () => {
+      await resubscribeAndSyncRoom();
+    };
+
     document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('ingo:realtime-reconnect', handleRealtimeReconnect as EventListener);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('ingo:realtime-reconnect', handleRealtimeReconnect as EventListener);
+    };
   }, []);
 
-  // 2. REALTIME CONNECTION MANAGER
   useEffect(() => {
     if (!room?.id) return;
     
-    // Cleanup previous channel
     if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
     }
@@ -154,7 +156,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     channel
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, (payload) => {
           const updatedRoom = payload.new as Room;
-          // Sync crucial state changes
+
           if (roomRef.current?.status === 'waiting' || updatedRoom.status === 'finished' || updatedRoom.players.length !== roomRef.current?.players.length) {
               setRoom(updatedRoom);
                if (user && updatedRoom.players && !updatedRoom.players.some(p => p.id === user.id)) {
@@ -174,7 +176,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (payload.questions) setQuestions(payload.questions);
       })
       .on('broadcast', { event: 'TOTALS_UPDATED' }, () => {
-          // Host signalled that totals were updated server-side — avoid client duplicates
           endGameUpdatedRef.current = true;
       })
       .on('broadcast', { event: 'SYNC_TIMER' }, ({ payload }) => {
@@ -192,8 +193,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
               channelRef.current = channel;
           } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
               console.warn("Room Channel Disconnected or Error:", status);
-              // Retry handled by visibility toggle or manual reload usually, 
-              // but we can rely on global ConnectionStatus to force socket reconnect
           }
       });
 
@@ -201,9 +200,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       supabase.removeChannel(channel);
       channelRef.current = null;
     };
-  }, [room?.id, subscriptionKey, t]); // Added subscriptionKey to force resub on visibility change
+  }, [room?.id, subscriptionKey, t]);
 
-  // 3. HOST TIMER LOGIC
   useEffect(() => {
     if (!isHost || room?.status !== 'playing') return;
 
@@ -235,13 +233,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [isHost, room?.status, room?.current_question_index, timeExpired]); 
 
-  // Reset round flags
   useEffect(() => {
       roundScoredRef.current = false;
   }, [room?.current_question_index]);
 
 
-  // 4. CLIENT-SIDE SCORE UPDATE
   useEffect(() => {
       if (room?.status === 'finished' && user && !user.role.includes('teacher') && !endGameUpdatedRef.current) {
           const myPlayerStats = room.players.find(p => p.id === user.id);
@@ -272,8 +268,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [room?.status, user]);
 
 
-  // --- BROADCAST HELPERS ---
-  
+
   const broadcastState = (updatedRoom: Room, updatedQuestions?: Question[]) => {
       channelRef.current?.send({
           type: 'broadcast',
@@ -344,7 +339,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       supabase.from('rooms').update({ players: updatedPlayers }).eq('id', roomRef.current.id).then();
   };
 
-  // --- ACTIONS ---
 
   const addCategory = async (categoryData: Omit<Category, 'id' | 'owner_id'>) => {
     if (!user) return;
@@ -556,22 +550,18 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (isFinished) {
         try {
-            // 1) Update player profiles server-side immediately (points + trophies)
             const players = room.players;
             const maxScore = Math.max(...players.map(p => p.score));
 
-            // Fetch current profiles for involved players
             const { data: profiles } = await supabase
                 .from('profiles')
                 .select('id, total_points, total_trophies')
                 .in('id', players.map(p => p.id));
 
             if (profiles) {
-                // Build map of existing profiles
                 const profMap: Record<string, any> = {};
                 profiles.forEach((pr: any) => { profMap[pr.id] = pr; });
 
-                // Prepare updates
                 await Promise.all(players.map(async (pl) => {
                     const existing = profMap[pl.id] || { total_points: 0, total_trophies: 0 };
                     const newPoints = (existing.total_points || 0) + (pl.score || 0);
@@ -580,17 +570,13 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }));
             }
 
-            // Mark that host already updated totals to avoid client duplication
             endGameUpdatedRef.current = true;
 
-            // Notify other clients to not run their own profile-updates
             channelRef.current?.send({ type: 'broadcast', event: 'TOTALS_UPDATED', payload: {} });
 
-            // 2) Persist room finished state
             await supabase.from('rooms').update({ status: 'finished', players: resetPlayers }).eq('id', room.id);
         } catch (err) {
             console.error('Error updating totals on finish:', err);
-            // Fallback: still mark room finished
             await supabase.from('rooms').update({ status: 'finished', players: resetPlayers }).eq('id', room.id);
         }
     } else {
@@ -684,7 +670,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { error };
   };
 
-  // Legacy manual add (defaults to approved)
   const addStudentToClass = async (classId: string, students: any[]) => {
       const { error } = await supabase.from('teacher_classes').update({ students: students }).eq('id', classId);
       if(error) console.error("Error adding student:", error);
@@ -701,7 +686,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await supabase.from('profiles').update({ banned: newStatus }).eq('id', studentId);
   };
 
-  // --- NEW: STUDENT JOIN REQUESTS & TEACHER SEARCH ---
 
   const searchTeacher = async (username: string) => {
     const { data } = await supabase.from('profiles')
@@ -714,7 +698,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const getTeacherClassesPublic = async (teacherId: string) => {
     const { data } = await supabase.from('teacher_classes')
-        .select('id, name, teacher_id, students') // We need students to check status
+        .select('id, name, teacher_id, students')
         .eq('teacher_id', teacherId);
     return data as TeacherClass[] || [];
   };
@@ -728,9 +712,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
               console.error('requestJoinClass rpc error:', error);
               return false;
           }
-          // Supabase rpc returns data; depending on pg boolean it may be returned as true/false or 't'/'f'
+
           if (data === true || data === 't' || data === 1) return true;
-          // If data is an array/object or null, fall back to truthy check
+
           return !!data;
       } catch (err) {
           console.error('requestJoinClass unexpected error:', err);
@@ -741,10 +725,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const resolveClassRequest = async (classId: string, studentId: string, currentStudents: any[], approved: boolean) => {
       let updatedStudents;
       if (approved) {
-          // Change status to approved
+ 
           updatedStudents = currentStudents.map(s => s.id === studentId ? { ...s, status: 'approved' } : s);
       } else {
-          // Remove from list
+
           updatedStudents = currentStudents.filter(s => s.id !== studentId);
       }
       
@@ -768,7 +752,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (!data) return [];
       
-      // Filter client side
       return data.filter((c: TeacherClass) => 
           c.students.some(s => s.id === user.id && (s.status === 'approved' || s.status === undefined))
       );
