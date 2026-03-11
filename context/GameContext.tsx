@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useRef, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Room, Question, RoomPlayer, Category, TeacherClass, Profile } from '../types';
@@ -6,39 +5,9 @@ import { useAuth } from './AuthContext';
 import { useLanguage } from './LanguageContext';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
-const levenshteinDistance = (a: string, b: string): number => {
-  const matrix = [];
-  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
-  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
-      if (b.charAt(i - 1) === a.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1,
-          Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1)
-        );
-      }
-    }
-  }
-  return matrix[b.length][a.length];
-};
-
 const normalizeText = (input: string): string => {
   if (!input) return '';
   let text = input.trim().toLocaleLowerCase('tr-TR');
-  text = text.replace(/[^\p{L}\p{N}\s]/gu, ' ');
-  text = text.replace(/\s+/g, ' ').trim();
-  return text;
-};
-
-const normalizeLoose = (input: string): string => {
-  if (!input) return '';
-  let text = input.trim().toLocaleLowerCase('tr-TR');
-  text = text.replace(/Ä±/g, 'i');
-  text = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   text = text.replace(/[^\p{L}\p{N}\s]/gu, ' ');
   text = text.replace(/\s+/g, ' ').trim();
   return text;
@@ -50,77 +19,70 @@ const splitAlternatives = (answer: string): string[] => {
   return parts.length ? parts : [answer.trim()];
 };
 
-const levenshteinSimilarity = (a: string, b: string): number => {
-  const maxLen = Math.max(a.length, b.length);
-  if (maxLen === 0) return 1;
-  const dist = levenshteinDistance(a, b);
-  return 1 - dist / maxLen;
+// Full scoring algorithm (ported from ptest.py)
+const scoreByPtestAlgorithm = (playerRaw: string, correctRaw: string): number => {
+  const correct = correctRaw.trim();
+  const player = playerRaw.trim();
+
+  if (correct.length === 0) return 0;
+  if (player.length / correct.length < 0.60) return 0;
+
+  let points = 15;
+  let wrongCount = 0;
+
+  const minLen = Math.min(correct.length, player.length);
+  for (let i = 0; i < minLen; i++) {
+    const d = correct[i];
+    const k = player[i];
+
+    if (d === k) continue;
+    if (d.toLowerCase() === k.toLowerCase()) continue;
+    if ((d === 'I' && k === 'ý') || (k === 'I' && d === 'ý')) continue;
+    if ((d === 'Ý' && k === 'i') || (k === 'Ý' && d === 'i')) continue;
+
+    wrongCount += 1;
+  }
+
+  if (correct.length > player.length) {
+    points -= (correct.length - player.length) * 3;
+  }
+
+  if (player.length > correct.length) {
+    wrongCount += (player.length - correct.length);
+  }
+
+  points -= wrongCount * 2;
+  return Math.max(0, points);
 };
 
-const tokenSimilarity = (a: string, b: string): number => {
-  const tokensA = normalizeLoose(a).split(' ').filter(Boolean);
-  const tokensB = normalizeLoose(b).split(' ').filter(Boolean);
-  if (tokensA.length === 0 || tokensB.length === 0) return 0;
-  const setA = new Set(tokensA);
-  const setB = new Set(tokensB);
-  let intersection = 0;
-  setA.forEach(t => { if (setB.has(t)) intersection++; });
-  const union = setA.size + setB.size - intersection;
-  return union === 0 ? 0 : intersection / union;
-};
-
-const phoneticKey = (input: string): string => {
-  let text = normalizeLoose(input).replace(/\s+/g, '');
-  if (!text) return '';
-  text = text.replace(/[aeiou]/g, '');
-  text = text.replace(/h/g, '');
-  text = text.replace(/(.)\1+/g, '$1');
-  return text;
-};
-
-const scoreTextAnswer = (playerAnswer: string, correctAnswer: string): { isCorrect: boolean; isPartial: boolean; points: number; similarity: number } => {
-  const normalizedPlayer = normalizeText(playerAnswer);
-  if (!normalizedPlayer) return { isCorrect: false, isPartial: false, points: 0, similarity: 0 };
+const scoreTextAnswer = (
+  playerAnswer: string,
+  correctAnswer: string
+): { isCorrect: boolean; isPartial: boolean; points: number; similarity: number | null } => {
+  const player = playerAnswer.trim();
+  if (!player) return { isCorrect: false, isPartial: false, points: 0, similarity: null };
 
   const alternatives = splitAlternatives(correctAnswer)
-    .map(a => ({ raw: a, norm: normalizeText(a) }))
-    .filter(a => a.norm.length > 0);
+    .map(a => a.trim())
+    .filter(Boolean);
 
+  let bestPoints = 0;
   for (const alt of alternatives) {
-    if (normalizedPlayer === alt.norm) {
-      return { isCorrect: true, isPartial: false, points: 15, similarity: 1 };
-    }
+    const points = scoreByPtestAlgorithm(player, alt);
+    if (points > bestPoints) bestPoints = points;
+    if (bestPoints === 15) break;
   }
 
-  let bestOverall = 0;
-  let bestLev = 0;
-  let bestLen = 0;
-  const loosePlayer = normalizeLoose(normalizedPlayer);
-  for (const alt of alternatives) {
-    const looseAlt = normalizeLoose(alt.norm);
-    const looseLev = levenshteinSimilarity(loosePlayer, looseAlt);
-    const strictLev = levenshteinSimilarity(normalizedPlayer, alt.norm);
-    const tok = tokenSimilarity(normalizedPlayer, alt.norm);
-    const phonetic = phoneticKey(normalizedPlayer) !== '' && phoneticKey(normalizedPlayer) === phoneticKey(alt.norm);
-    const overall = (0.4 * looseLev) + (0.35 * strictLev) + (0.15 * tok) + (0.10 * (phonetic ? 1 : 0));
-    if (overall > bestOverall) {
-      bestOverall = overall;
-      bestLev = Math.max(looseLev, strictLev);
-      bestLen = alt.norm.length;
-    }
+  if (bestPoints === 15) {
+    return { isCorrect: true, isPartial: false, points: 15, similarity: null };
   }
 
-  const minLen = Math.min(normalizedPlayer.length, bestLen);
-  if (minLen < 4) return { isCorrect: false, isPartial: false, points: 0, similarity: bestOverall };
-
-  if (bestOverall >= 0.65 && bestLev >= 0.6) {
-    const points = Math.min(14, Math.max(4, Math.round(12 * bestOverall)));
-    return { isCorrect: false, isPartial: true, points, similarity: bestOverall };
+  if (bestPoints > 0) {
+    return { isCorrect: false, isPartial: true, points: bestPoints, similarity: null };
   }
 
-  return { isCorrect: false, isPartial: false, points: 0, similarity: bestOverall };
+  return { isCorrect: false, isPartial: false, points: 0, similarity: null };
 };
-
 interface GameContextType {
   room: Room | null;
   questions: Question[];

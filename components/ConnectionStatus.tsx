@@ -13,11 +13,20 @@ export const ConnectionStatus: React.FC = () => {
   const reconnectTimeoutRef = useRef<number | null>(null);
   const hasConfirmedConnectionRef = useRef(false);
   const location = useLocation();
-  const isGameArena = location.pathname === '/game';
+  const effectivePath = location.pathname !== '/' ? location.pathname : (location.hash?.replace(/^#/, '') || location.pathname);
+  const isGameArena = effectivePath === '/game';
 
   const isProfileSettingsFileBusy = () => {
     try {
       return sessionStorage.getItem('ingo_profile_settings_file_busy') === '1';
+    } catch {
+      return false;
+    }
+  };
+
+  const isCategoryUploadFileBusy = () => {
+    try {
+      return sessionStorage.getItem('ingo_category_upload_file_busy') === '1';
     } catch {
       return false;
     }
@@ -111,7 +120,11 @@ export const ConnectionStatus: React.FC = () => {
   useEffect(() => {
     const handleDraftReady = () => setReconnectCheckTick((v) => v + 1);
     window.addEventListener('ingo:profile-settings-file-ready', handleDraftReady);
-    return () => window.removeEventListener('ingo:profile-settings-file-ready', handleDraftReady);
+    window.addEventListener('ingo:category-upload-file-ready', handleDraftReady);
+    return () => {
+      window.removeEventListener('ingo:profile-settings-file-ready', handleDraftReady);
+      window.removeEventListener('ingo:category-upload-file-ready', handleDraftReady);
+    };
   }, []);
 
   useEffect(() => {
@@ -131,10 +144,11 @@ export const ConnectionStatus: React.FC = () => {
       setShowReconnectPopup(true);
     }
 
+    const isFileBusy = isProfileSettingsFileBusy() || isCategoryUploadFileBusy();
     if (
       !isGameArena &&
-      location.pathname !== '/settings' &&
-      !(location.pathname === '/profile-settings' && isProfileSettingsFileBusy()) &&
+      effectivePath !== '/settings' &&
+      !isFileBusy &&
       !isConnected &&
       hasConfirmedConnectionRef.current
     ) {

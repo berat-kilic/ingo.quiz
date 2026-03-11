@@ -8,8 +8,123 @@ import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
 import { Trophy, Zap, Plus, LogOut, Settings as SettingsIcon, Crown, Edit, Loader2, Bell, X, Check, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { Category, Question, TeacherClass, Profile as UserProfile } from '../types';
+import { Category, Question, TeacherClass, Profile as UserProfile, QuestionType } from '../types';
 import { supabase } from '../lib/supabase';
+
+type CategoryModeUI = 'multiple-choice' | 'text' | 'dictionary';
+
+type CategoryDraft = {
+  name: string;
+  mode: CategoryModeUI;
+  questions: Question[];
+  dictionaryText?: string;
+  dictionaryStored?: boolean;
+  dictionaryFileName?: string;
+  wasOpen?: boolean;
+  updatedAt?: number;
+};
+
+const parseDictionaryText = (raw: string): { questions: Question[]; skipped: number } => {
+  const lines = raw.split(/\r?\n/);
+  const questions: Question[] = [];
+  let skipped = 0;
+
+  for (const lineRaw of lines) {
+    const line = lineRaw.trim();
+    if (!line) continue;
+    const sepIdx = line.indexOf(':');
+    if (sepIdx <= 0 || sepIdx >= line.length - 1) {
+      skipped += 1;
+      continue;
+    }
+    const text = line.slice(0, sepIdx).trim();
+    const answer = line.slice(sepIdx + 1).trim();
+    if (!text || !answer) {
+      skipped += 1;
+      continue;
+    }
+    questions.push({
+      id: Math.random().toString(36),
+      text,
+      correctAnswer: answer,
+      type: 'text'
+    });
+  }
+
+  return { questions, skipped };
+};
+
+const formatTemplate = (template: string, params: Record<string, string | number>) => {
+  return Object.keys(params).reduce((acc, key) => {
+    return acc.replace(new RegExp(`\\{${key}\\}`, 'g'), String(params[key]));
+  }, template);
+};
+
+const isDictionaryMode = (mode: CategoryModeUI | QuestionType): mode is 'dictionary' => mode === 'dictionary';
+
+const DICT_DB_NAME = 'ingo_category_uploads';
+const DICT_STORE_NAME = 'dictionary_text';
+const DICT_DB_VERSION = 1;
+
+const openDictionaryDb = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DICT_DB_NAME, DICT_DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(DICT_STORE_NAME)) {
+        db.createObjectStore(DICT_STORE_NAME);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+};
+
+const saveDictionaryText = async (key: string, text: string) => {
+  try {
+    const db = await openDictionaryDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(DICT_STORE_NAME, 'readwrite');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.objectStore(DICT_STORE_NAME).put(text, key);
+    });
+    db.close();
+  } catch {
+    
+  }
+};
+
+const loadDictionaryText = async (key: string): Promise<string | null> => {
+  try {
+    const db = await openDictionaryDb();
+    const value = await new Promise<string | null>((resolve, reject) => {
+      const tx = db.transaction(DICT_STORE_NAME, 'readonly');
+      const req = tx.objectStore(DICT_STORE_NAME).get(key);
+      req.onsuccess = () => resolve((req.result as string) || null);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return value;
+  } catch {
+    return null;
+  }
+};
+
+const clearDictionaryText = async (key: string) => {
+  try {
+    const db = await openDictionaryDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(DICT_STORE_NAME, 'readwrite');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.objectStore(DICT_STORE_NAME).delete(key);
+    });
+    db.close();
+  } catch {
+    
+  }
+};
 
 const Dashboard: React.FC = () => {
   const { user, signOut } = useAuth();
@@ -42,7 +157,7 @@ const Dashboard: React.FC = () => {
   });
 
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
-  const [newCategory, setNewCategory] = useState<{name: string, mode: 'multiple-choice' | 'text', questions: Question[]}>({
+  const [newCategory, setNewCategory] = useState<{name: string, mode: CategoryModeUI, questions: Question[]}>({
       name: '',
       mode: 'text',
       questions: []
@@ -52,6 +167,18 @@ const Dashboard: React.FC = () => {
       correct: '',
       w1: '', w2: '', w3: ''
   });
+  const [dictionaryText, setDictionaryText] = useState('');
+  const [dictionaryFileName, setDictionaryFileName] = useState('');
+  const [dictionaryError, setDictionaryError] = useState('');
+  const [dictionaryLoading, setDictionaryLoading] = useState(false);
+  const [dictionaryPasteText, setDictionaryPasteText] = useState('');
+  const awaitingDictionaryPickRef = useRef(false);
+  const dictionaryPickStartedAtRef = useRef(0);
+  const dictionaryInputRef = useRef<HTMLInputElement | null>(null);
+  const categoryDraftLoadedRef = useRef(false);
+  const categoryDraftKey = useMemo(() => `ingo_category_draft_${user?.id || 'guest'}`, [user?.id]);
+  const dictionaryStorageKey = useMemo(() => `${categoryDraftKey}_dictionary`, [categoryDraftKey]);
+  const dictionaryPendingKey = useMemo(() => `${categoryDraftKey}_dictionary_pending`, [categoryDraftKey]);
 
   const [userStats, setUserStats] = useState({
     total_points: user?.total_points || 0,
@@ -142,6 +269,100 @@ const Dashboard: React.FC = () => {
   }, [user?.id, isTeacher]);
 
   useEffect(() => {
+    if (!isTeacher) return;
+    let cancelled = false;
+    const restore = async () => {
+      try {
+        const raw = localStorage.getItem(categoryDraftKey);
+        const pendingPick = localStorage.getItem(dictionaryPendingKey) === '1';
+        if (!raw) {
+          categoryDraftLoadedRef.current = true;
+          return;
+        }
+        const draft = JSON.parse(raw) as CategoryDraft;
+        if (!draft.name && !draft.questions?.length && !draft.dictionaryText && !draft.dictionaryStored && !pendingPick) {
+          categoryDraftLoadedRef.current = true;
+          return;
+        }
+
+        const shouldTryRestore =
+          !!draft.dictionaryText ||
+          !!draft.dictionaryStored ||
+          !!draft.dictionaryFileName ||
+          draft.mode === 'dictionary' ||
+          pendingPick;
+
+        const restoredText =
+          draft.dictionaryText ||
+          (shouldTryRestore ? await loadDictionaryText(dictionaryStorageKey) : '');
+
+        if (cancelled) return;
+
+        setNewCategory({
+          name: draft.name || '',
+          mode: draft.mode || 'text',
+          questions: Array.isArray(draft.questions) ? draft.questions : []
+        });
+        setDictionaryText(restoredText || '');
+        setDictionaryFileName(draft.dictionaryFileName || '');
+
+        if (restoredText && draft.mode === 'dictionary') {
+          const parsed = parseDictionaryText(restoredText);
+          setNewCategory(prev => ({
+            ...prev,
+            questions: parsed.questions
+          }));
+          if (parsed.skipped > 0) {
+            setDictionaryError(formatTemplate(t('dictionarySomeLinesSkipped'), { count: parsed.skipped }));
+          }
+          if (pendingPick) {
+            localStorage.removeItem(dictionaryPendingKey);
+          }
+        } else if (pendingPick && !restoredText) {
+          setDictionaryError(t('dictionaryPickLost'));
+          localStorage.removeItem(dictionaryPendingKey);
+        }
+
+        if (draft.wasOpen) {
+          setIsCategoryModalOpen(true);
+          setIsRoomModalOpen(false);
+        }
+      } catch {
+        
+      } finally {
+        categoryDraftLoadedRef.current = true;
+      }
+    };
+
+    restore();
+    return () => {
+      cancelled = true;
+    };
+  }, [categoryDraftKey, dictionaryPendingKey, dictionaryStorageKey, isTeacher, t]);
+
+  useEffect(() => {
+    if (!isTeacher) return;
+    if (!categoryDraftLoadedRef.current) return;
+    try {
+      const draft: CategoryDraft = {
+        name: newCategory.name,
+        mode: newCategory.mode,
+        questions: newCategory.questions,
+        dictionaryStored: !!dictionaryText,
+        dictionaryFileName: dictionaryFileName || undefined,
+        wasOpen: isCategoryModalOpen,
+        updatedAt: Date.now()
+      };
+      localStorage.setItem(categoryDraftKey, JSON.stringify(draft));
+      if (dictionaryText) {
+        saveDictionaryText(dictionaryStorageKey, dictionaryText);
+      }
+    } catch {
+      
+    }
+  }, [categoryDraftKey, dictionaryFileName, dictionaryStorageKey, dictionaryText, isCategoryModalOpen, isTeacher, newCategory.name, newCategory.mode, newCategory.questions]);
+
+  useEffect(() => {
     return () => {
       if (highlightTimeoutRef.current) {
         window.clearTimeout(highlightTimeoutRef.current);
@@ -209,19 +430,25 @@ const Dashboard: React.FC = () => {
       if(!cat) return;
       setEditingCategoryId(cat.id);
       setNewCategory({ name: cat.name, mode: cat.mode as any, questions: cat.questions });
+      setDictionaryText('');
+      setDictionaryFileName('');
+      setDictionaryError('');
+      clearDictionaryText(dictionaryStorageKey);
       setIsCategoryModalOpen(true);
       setIsRoomModalOpen(false); 
   };
 
   const handleAddQuestion = () => {
       if(!tempQuestion.text || !tempQuestion.correct) return;
-      
+      if (isDictionaryMode(newCategory.mode)) return;
+
+      const effectiveType: QuestionType = isDictionaryMode(newCategory.mode) ? 'text' : newCategory.mode;
       const q: Question = {
           id: Math.random().toString(36),
           text: tempQuestion.text,
           correctAnswer: tempQuestion.correct,
-          type: newCategory.mode,
-          options: newCategory.mode === 'multiple-choice' 
+          type: effectiveType,
+          options: effectiveType === 'multiple-choice' 
             ? [tempQuestion.correct, tempQuestion.w1, tempQuestion.w2, tempQuestion.w3]
             : undefined
       };
@@ -236,21 +463,28 @@ const Dashboard: React.FC = () => {
 
   const handleSaveCategory = async () => {
       if(!newCategory.name || newCategory.questions.length === 0) return;
-      
+
+      const finalMode: QuestionType = isDictionaryMode(newCategory.mode) ? 'text' : newCategory.mode;
+      const normalizedQuestions = newCategory.questions.map(q => ({
+        ...q,
+        type: finalMode,
+        options: finalMode === 'multiple-choice' ? q.options : undefined
+      }));
+
       if (editingCategoryId) {
           const updatedCat: Category = {
               id: editingCategoryId,
               name: newCategory.name,
               owner_id: user?.id || '',
-              mode: newCategory.mode,
-              questions: newCategory.questions
+              mode: finalMode,
+              questions: normalizedQuestions
           };
           await updateCategory(updatedCat);
       } else {
           const cat: any = {
               name: newCategory.name,
-              mode: newCategory.mode,
-              questions: newCategory.questions
+              mode: finalMode,
+              questions: normalizedQuestions
           };
           await addCategory(cat);
       }
@@ -259,6 +493,173 @@ const Dashboard: React.FC = () => {
       setIsRoomModalOpen(true); 
       setEditingCategoryId(null);
       setNewCategory({ name: '', mode: 'text', questions: [] });
+      setDictionaryText('');
+      setDictionaryFileName('');
+      setDictionaryError('');
+      try {
+        localStorage.removeItem(categoryDraftKey);
+      } catch {
+        
+      }
+      clearDictionaryText(dictionaryStorageKey);
+  };
+
+  const setDictionaryFileBusy = () => {
+    try {
+      sessionStorage.setItem('ingo_category_upload_file_busy', '1');
+    } catch {
+      
+    }
+  };
+
+  const clearDictionaryFileBusyAndNotify = () => {
+    try {
+      sessionStorage.removeItem('ingo_category_upload_file_busy');
+    } catch {
+      
+    }
+    window.dispatchEvent(new CustomEvent('ingo:category-upload-file-ready'));
+  };
+
+  const applyDictionaryText = (text: string, fileName?: string) => {
+    const safeText = String(text || '');
+    if (!safeText.trim()) {
+      setDictionaryError(t('dictionaryParseFailed'));
+      return;
+    }
+    setDictionaryText(safeText);
+    if (typeof fileName === 'string') {
+      setDictionaryFileName(fileName);
+    }
+    saveDictionaryText(dictionaryStorageKey, safeText);
+    const parsed = parseDictionaryText(safeText);
+    setNewCategory(prev => ({ ...prev, questions: parsed.questions }));
+    if (parsed.skipped > 0) {
+      setDictionaryError(formatTemplate(t('dictionarySomeLinesSkipped'), { count: parsed.skipped }));
+    } else {
+      setDictionaryError('');
+    }
+  };
+
+  const readDictionaryFile = (file: File) => {
+    if (!file.name.toLowerCase().endsWith('.txt')) {
+      setDictionaryError(t('dictionaryFileTypeError'));
+      try {
+        localStorage.removeItem(dictionaryPendingKey);
+      } catch {
+        
+      }
+      clearDictionaryFileBusyAndNotify();
+      return;
+    }
+
+    setDictionaryError('');
+    setDictionaryLoading(true);
+    setDictionaryFileName(file.name);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || '');
+      if (!text) {
+        setDictionaryError(t('dictionaryParseFailed'));
+        setDictionaryLoading(false);
+        try {
+          localStorage.removeItem(dictionaryPendingKey);
+        } catch {
+          
+        }
+        clearDictionaryFileBusyAndNotify();
+        return;
+      }
+      try {
+        localStorage.removeItem(dictionaryPendingKey);
+      } catch {
+        
+      }
+      applyDictionaryText(text, file.name);
+      setDictionaryLoading(false);
+      clearDictionaryFileBusyAndNotify();
+    };
+    reader.onerror = () => {
+      setDictionaryError(t('dictionaryParseFailed'));
+      setDictionaryLoading(false);
+      try {
+        localStorage.removeItem(dictionaryPendingKey);
+      } catch {
+        
+      }
+      clearDictionaryFileBusyAndNotify();
+    };
+    reader.readAsText(file);
+  };
+
+  const handleApplyPaste = () => {
+    if (!dictionaryPasteText.trim()) {
+      setDictionaryError(t('dictionaryParseFailed'));
+      return;
+    }
+    try {
+      localStorage.removeItem(dictionaryPendingKey);
+    } catch {
+      
+    }
+    applyDictionaryText(dictionaryPasteText, t('dictionaryPastedName'));
+  };
+
+  useEffect(() => {
+    const onFocus = () => {
+      if (!awaitingDictionaryPickRef.current) return;
+      const elapsed = Date.now() - dictionaryPickStartedAtRef.current;
+      setTimeout(() => {
+        if (!awaitingDictionaryPickRef.current) return;
+        if (Date.now() - dictionaryPickStartedAtRef.current < 1500) {
+          return;
+        }
+        const fallbackFile = dictionaryInputRef.current?.files?.[0];
+        if (fallbackFile && !dictionaryText) {
+          awaitingDictionaryPickRef.current = false;
+          readDictionaryFile(fallbackFile);
+          return;
+        }
+        awaitingDictionaryPickRef.current = false;
+        clearDictionaryFileBusyAndNotify();
+      }, Math.max(600, 1500 - elapsed));
+    };
+
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearDictionaryFileBusyAndNotify();
+    };
+  }, []);
+
+  const markDictionaryFilePickStarted = () => {
+    awaitingDictionaryPickRef.current = true;
+    dictionaryPickStartedAtRef.current = Date.now();
+    try {
+      localStorage.setItem(dictionaryPendingKey, '1');
+    } catch {
+      
+    }
+    setDictionaryFileBusy();
+  };
+
+  const handleDictionaryFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    awaitingDictionaryPickRef.current = false;
+    const file = e.target.files?.[0];
+    if (!file) {
+      try {
+        localStorage.removeItem(dictionaryPendingKey);
+      } catch {
+        
+      }
+      clearDictionaryFileBusyAndNotify();
+      return;
+    }
+    readDictionaryFile(file);
   };
 
   const handleRequestAction = async (classId: string, studentId: string, approved: boolean) => {
@@ -578,6 +979,10 @@ const Dashboard: React.FC = () => {
                         <Button variant="ghost" size="sm" onClick={() => { 
                             setEditingCategoryId(null);
                             setNewCategory({ name: '', mode: 'text', questions: [] });
+                            setDictionaryText('');
+                            setDictionaryFileName('');
+                            setDictionaryError('');
+                            clearDictionaryText(dictionaryStorageKey);
                             setIsRoomModalOpen(false); 
                             setIsCategoryModalOpen(true); 
                         }}>
@@ -635,6 +1040,7 @@ const Dashboard: React.FC = () => {
                 >
                     <option value="text">{t('modeClassic')}</option>
                     <option value="multiple-choice">{t('modeMulti')}</option>
+                    <option value="dictionary">{t('modeDictionary')}</option>
                 </select>
              </div>
              
@@ -651,33 +1057,78 @@ const Dashboard: React.FC = () => {
                  ))}
              </div>
 
-             <div className="p-4 bg-white/5 rounded-xl border border-white/10 space-y-3">
-                 <h4 className="font-bold text-sm text-primary">{t('newQuestion')}</h4>
-                 <input 
-                    type="text" 
-                    placeholder={t('questionText')}
-                    className="w-full bg-base border border-white/10 rounded-lg p-2 text-sm"
-                    value={tempQuestion.text}
-                    onChange={(e) => setTempQuestion({...tempQuestion, text: e.target.value})}
-                 />
-                 <input 
-                    type="text" 
-                    placeholder={t('answerText')}
-                    className="w-full bg-base border border-green-500/30 rounded-lg p-2 text-sm"
-                    value={tempQuestion.correct}
-                    onChange={(e) => setTempQuestion({...tempQuestion, correct: e.target.value})}
-                 />
-                 
-                 {newCategory.mode === 'multiple-choice' && (
-                     <div className="grid grid-cols-3 gap-2">
-                         <input type="text" placeholder={t('wrongOption1')} className="bg-base border border-danger/30 rounded p-2 text-xs" value={tempQuestion.w1} onChange={e => setTempQuestion({...tempQuestion, w1: e.target.value})} />
-                         <input type="text" placeholder={t('wrongOption2')} className="bg-base border border-danger/30 rounded p-2 text-xs" value={tempQuestion.w2} onChange={e => setTempQuestion({...tempQuestion, w2: e.target.value})} />
-                         <input type="text" placeholder={t('wrongOption3')} className="bg-base border border-danger/30 rounded p-2 text-xs" value={tempQuestion.w3} onChange={e => setTempQuestion({...tempQuestion, w3: e.target.value})} />
+             {isDictionaryMode(newCategory.mode) ? (
+                 <div className="p-4 bg-white/5 rounded-xl border border-white/10 space-y-3">
+                     <h4 className="font-bold text-sm text-primary">{t('dictionaryUpload')}</h4>
+                     <p className="text-xs text-gray-400">{t('dictionaryFormatHint')}</p>
+                     <div
+                       className="relative inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-sm cursor-pointer"
+                       onPointerDown={markDictionaryFilePickStarted}
+                     >
+                       <span>{dictionaryFileName ? t('dictionaryReplaceFile') : t('dictionarySelectFile')}</span>
+                       <input
+                         ref={dictionaryInputRef}
+                         type="file"
+                         accept=".txt,text/plain"
+                         className="absolute inset-0 opacity-0 cursor-pointer"
+                         onPointerDown={markDictionaryFilePickStarted}
+                         onChange={handleDictionaryFileUpload}
+                         onInput={handleDictionaryFileUpload as any}
+                       />
                      </div>
-                 )}
+                     {dictionaryLoading && (
+                       <div className="text-xs text-gray-400">{t('dictionaryLoading')}</div>
+                     )}
+                     {dictionaryFileName && (
+                       <div className="text-xs text-gray-400">
+                         {formatTemplate(t('dictionaryLoaded'), { name: dictionaryFileName, count: newCategory.questions.length })}
+                       </div>
+                     )}
+                     {dictionaryError && (
+                       <div className="text-xs text-danger">{dictionaryError}</div>
+                     )}
+                     <div className="pt-2 border-t border-white/10 space-y-2">
+                       <div className="text-xs text-gray-400">{t('dictionaryPasteLabel')}</div>
+                       <textarea
+                         className="w-full min-h-[96px] bg-base border border-white/10 rounded-lg p-2 text-xs"
+                         placeholder={t('dictionaryPastePlaceholder')}
+                         value={dictionaryPasteText}
+                         onChange={(e) => setDictionaryPasteText(e.target.value)}
+                       />
+                       <Button size="sm" fullWidth onClick={handleApplyPaste}>
+                         {t('dictionaryApplyPaste')}
+                       </Button>
+                     </div>
+                 </div>
+             ) : (
+                 <div className="p-4 bg-white/5 rounded-xl border border-white/10 space-y-3">
+                     <h4 className="font-bold text-sm text-primary">{t('newQuestion')}</h4>
+                     <input 
+                        type="text" 
+                        placeholder={t('questionText')}
+                        className="w-full bg-base border border-white/10 rounded-lg p-2 text-sm"
+                        value={tempQuestion.text}
+                        onChange={(e) => setTempQuestion({...tempQuestion, text: e.target.value})}
+                     />
+                     <input 
+                        type="text" 
+                        placeholder={t('answerText')}
+                        className="w-full bg-base border border-green-500/30 rounded-lg p-2 text-sm"
+                        value={tempQuestion.correct}
+                        onChange={(e) => setTempQuestion({...tempQuestion, correct: e.target.value})}
+                     />
+                     
+                     {newCategory.mode === 'multiple-choice' && (
+                         <div className="grid grid-cols-3 gap-2">
+                             <input type="text" placeholder={t('wrongOption1')} className="bg-base border border-danger/30 rounded p-2 text-xs" value={tempQuestion.w1} onChange={e => setTempQuestion({...tempQuestion, w1: e.target.value})} />
+                             <input type="text" placeholder={t('wrongOption2')} className="bg-base border border-danger/30 rounded p-2 text-xs" value={tempQuestion.w2} onChange={e => setTempQuestion({...tempQuestion, w2: e.target.value})} />
+                             <input type="text" placeholder={t('wrongOption3')} className="bg-base border border-danger/30 rounded p-2 text-xs" value={tempQuestion.w3} onChange={e => setTempQuestion({...tempQuestion, w3: e.target.value})} />
+                         </div>
+                     )}
 
-                 <Button size="sm" fullWidth onClick={handleAddQuestion}>{t('addQuestion')}</Button>
-             </div>
+                     <Button size="sm" fullWidth onClick={handleAddQuestion}>{t('addQuestion')}</Button>
+                 </div>
+             )}
              
              <Button fullWidth onClick={handleSaveCategory} variant="secondary">
                  {t('saveCategory')}

@@ -19,6 +19,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const generateEmail = (username: string) => `${username.toLowerCase().replace(/[^a-z0-9]/g, '')}@ingo.game`;
 
+export const generateRandomAvatarUrl = () => {
+  const randomSeed = Math.random().toString(36).substring(7) + Date.now().toString();
+  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${randomSeed}`;
+};
+
 const compressImage = (file: File): Promise<Blob> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -209,8 +214,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const email = generateEmail(username);
       
       // Random Avatar Sitesi
-      const randomSeed = Math.random().toString(36).substring(7) + Date.now().toString();
-      const avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${randomSeed}`;
+      const avatar = generateRandomAvatarUrl();
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
           email: email,

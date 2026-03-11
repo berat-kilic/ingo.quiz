@@ -70,6 +70,7 @@ const translations = {
     gameMode: 'Game Mode',
     modeClassic: 'Classic (Typing)',
     modeMulti: 'Multiple Choice',
+    modeDictionary: 'Load Dictionary',
     questionText: 'Question',
     answerText: 'Correct Answer (use / for alternatives)',
     wrongOption1: 'Wrong Option 1',
@@ -78,6 +79,20 @@ const translations = {
     addQuestion: 'Add',
     saveCategory: 'Save Category',
     newQuestion: 'New Question',
+    dictionaryUpload: 'Dictionary Upload',
+    dictionaryFormatHint: 'TXT format: each line "question:answer". Each line becomes a separate classic question.',
+    dictionarySelectFile: 'Select .txt file',
+    dictionaryReplaceFile: 'Replace file',
+    dictionaryLoaded: 'Loaded: {name} ({count} questions)',
+    dictionaryFileTypeError: 'Please select a .txt file.',
+    dictionaryParseFailed: 'Dictionary file could not be read.',
+    dictionarySomeLinesSkipped: '{count} lines were skipped due to invalid format.',
+    dictionaryLoading: 'Reading file...',
+    dictionaryPickLost: 'File selection was interrupted. Please select the file again.',
+    dictionaryPasteLabel: 'Or paste the text below',
+    dictionaryPastePlaceholder: 'question:answer (each line is a separate question)',
+    dictionaryApplyPaste: 'Process Pasted Text',
+    dictionaryPastedName: 'Pasted Text',
 
     // Lobi
     roomCode: 'Room Code',
@@ -109,6 +124,7 @@ const translations = {
     incorrect: 'Incorrect',
     similarityScore: 'Similarity',
     nextQuestion: 'Next Question',
+    autoNextQuestion: 'Auto-advance',
     correctAnswerIs: 'Correct Answer',
     gameFinished: 'Game Finished!',
     finalResults: 'Final Results',
@@ -163,6 +179,7 @@ const translations = {
 
     // Profil ayar menüsü
     selectImage: 'Select Image',
+    randomAvatar: 'Random Avatar',
     min6CharsPlaceholder: 'Enter at least 6 characters',
     retypePasswordPlaceholder: 'Re-enter password',
     saveFailed: 'Save failed. Please try again.',
@@ -273,6 +290,7 @@ const translations = {
     gameMode: 'Oyun Modu',
     modeClassic: 'Klasik (Yazmalı)',
     modeMulti: 'Çoktan Seçmeli',
+    modeDictionary: 'Sözlük Yükle',
     questionText: 'Soru',
     answerText: 'Doğru Cevap (/ ile alternatif ekle)',
     wrongOption1: 'Yanlış Şık 1',
@@ -281,6 +299,20 @@ const translations = {
     addQuestion: 'Ekle',
     saveCategory: 'Kaydet',
     newQuestion: 'Yeni Soru',
+    dictionaryUpload: 'Sözlük Yükle',
+    dictionaryFormatHint: 'TXT formatı: her satır "soru:cevap". Her satır ayrı klasik soru olur.',
+    dictionarySelectFile: '.txt dosyası seç',
+    dictionaryReplaceFile: 'Dosyayı değiştir',
+    dictionaryLoaded: 'Yüklendi: {name} ({count} soru)',
+    dictionaryFileTypeError: 'Lütfen .txt dosyası seçin.',
+    dictionaryParseFailed: 'Sözlük dosyası okunamadı.',
+    dictionarySomeLinesSkipped: '{count} satır format hatası nedeniyle atlandı.',
+    dictionaryLoading: 'Dosya okunuyor...',
+    dictionaryPickLost: 'Dosya seçimi yarıda kaldı. Lütfen dosyayı tekrar seçin.',
+    dictionaryPasteLabel: 'Veya aşağıya yapıştır',
+    dictionaryPastePlaceholder: 'soru:cevap (her satır ayrı soru)',
+    dictionaryApplyPaste: 'Yapıştırılan Metni İşle',
+    dictionaryPastedName: 'Yapıştırılan Metin',
 
     // Lobi
     roomCode: 'Oda Kodu',
@@ -312,6 +344,7 @@ const translations = {
     incorrect: 'Yanlış',
     similarityScore: 'Benzerlik',
     nextQuestion: 'Sıradaki Soru',
+    autoNextQuestion: 'Oto geçiş',
     correctAnswerIs: 'Doğru Cevap',
     gameFinished: 'Oyun Bitti!',
     finalResults: 'Final Sonuçlar',
@@ -366,6 +399,7 @@ const translations = {
 
     // Profil ayar menüsü
     selectImage: 'Resim Seç',
+    randomAvatar: 'Rastgele Avatar',
     min6CharsPlaceholder: 'En az 6 karakter girin',
     retypePasswordPlaceholder: 'Şifreyi tekrar girin',
     saveFailed: 'Kaydetme başarısız. Lütfen tekrar deneyin.',
@@ -465,3 +499,4 @@ export const useLanguage = () => {
   }
   return context;
 };
+

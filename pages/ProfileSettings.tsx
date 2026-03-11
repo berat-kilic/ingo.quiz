@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Upload } from 'lucide-react';
 import { Button } from '../components/Button';
 import { GlassPanel } from '../components/GlassPanel';
-import { useAuth } from '../context/AuthContext';
+import { generateRandomAvatarUrl, useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 
 type DraftState = {
@@ -183,6 +183,13 @@ const ProfileSettings: React.FC = () => {
     }
   };
 
+  const handleRandomAvatar = () => {
+    const avatar = generateRandomAvatarUrl();
+    setAvatarPreview(avatar);
+    setPendingAvatarFile(null);
+    setPendingAvatarDataUrl(null);
+  };
+
   if (!user) return null;
 
   return (
@@ -200,11 +207,16 @@ const ProfileSettings: React.FC = () => {
           <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-br from-gold via-orange-500 to-primary overflow-hidden">
             <img src={avatarPreview || user.avatar_url} className="w-full h-full rounded-full border-4 border-card object-cover" />
           </div>
-          <label onClick={markFilePickStarted} className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors">
-            <Upload className="w-4 h-4" />
-            <span>{t('selectImage')}</span>
-            <input type="file" accept="image/*" className="hidden" onClick={markFilePickStarted} onChange={handleFileUpload} />
-          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <label onClick={markFilePickStarted} className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors">
+              <Upload className="w-4 h-4" />
+              <span>{t('selectImage')}</span>
+              <input type="file" accept="image/*" className="hidden" onClick={markFilePickStarted} onChange={handleFileUpload} />
+            </label>
+            <Button variant="secondary" onClick={handleRandomAvatar}>
+              {t('randomAvatar')}
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -22,11 +22,13 @@ const GameArena: React.FC = () => {
   const [textAnswer, setTextAnswer] = useState('');
   const [hasSelected, setHasSelected] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState(false);
   
   const [endGameTotalScores, setEndGameTotalScores] = useState<any[]>([]);
   const [loadingEndGame, setLoadingEndGame] = useState(false);
   const lastResolvedQuestionIdRef = useRef<string | null>(null);
   const winPlayedForRoomRef = useRef<string | null>(null);
+  const autoAdvanceTimeoutRef = useRef<number | null>(null);
   const myPlayer = room?.players.find(p => p.id === user?.id);
 
   useEffect(() => {
@@ -80,6 +82,30 @@ const GameArena: React.FC = () => {
       playEffect('wrong', { restart: true });
     }
   }, [currentQuestion?.id, myPlayer?.last_answer_correct, myPlayer?.last_answer_partial, playEffect, room?.status, stopEffect, timeExpired]);
+
+  useEffect(() => {
+    if (!isHost || !autoAdvanceEnabled || !room || room.status !== 'playing' || !timeExpired || !currentQuestion) {
+      if (autoAdvanceTimeoutRef.current !== null) {
+        window.clearTimeout(autoAdvanceTimeoutRef.current);
+        autoAdvanceTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    if (autoAdvanceTimeoutRef.current !== null) return;
+
+    autoAdvanceTimeoutRef.current = window.setTimeout(() => {
+      autoAdvanceTimeoutRef.current = null;
+      nextQuestion();
+    }, 3000);
+
+    return () => {
+      if (autoAdvanceTimeoutRef.current !== null) {
+        window.clearTimeout(autoAdvanceTimeoutRef.current);
+        autoAdvanceTimeoutRef.current = null;
+      }
+    };
+  }, [autoAdvanceEnabled, currentQuestion?.id, isHost, nextQuestion, room?.status, timeExpired]);
 
   useEffect(() => {
     if (room?.status === 'waiting') {
@@ -382,14 +408,27 @@ const GameArena: React.FC = () => {
       </div>
       
       {/* EXIT GAME BUTTON (Bottom Left) */}
-      <motion.button 
-          whileHover={{ scale: 1.1 }}
-          onClick={handleExitGame}
-          className="fixed bottom-6 left-6 z-50 p-3 bg-red-500/10 text-red-500 border border-red-500/20 rounded-full hover:bg-red-500/20 transition-colors"
-          title={t('leaveGameTitle')}
-      >
-          <LogOut className="w-6 h-6" />
-      </motion.button>
+      <div className="fixed bottom-6 left-6 z-50 flex items-center gap-3">
+          <motion.button 
+              whileHover={{ scale: 1.1 }}
+              onClick={handleExitGame}
+              className="p-3 bg-red-500/10 text-red-500 border border-red-500/20 rounded-full hover:bg-red-500/20 transition-colors"
+              title={t('leaveGameTitle')}
+          >
+              <LogOut className="w-6 h-6" />
+          </motion.button>
+          {isHost && room.status === 'playing' && (
+              <label className="flex items-center gap-2 px-3 py-2 rounded-full bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 text-xs font-semibold select-none">
+                  <input
+                      type="checkbox"
+                      checked={autoAdvanceEnabled}
+                      onChange={(e) => setAutoAdvanceEnabled(e.target.checked)}
+                      className="h-4 w-4 accent-yellow-400"
+                  />
+                  {t('autoNextQuestion')}
+              </label>
+          )}
+      </div>
 
       {/* RIGHT SIDE: LIVE SCOREBOARD (Desktop) */}
       <GlassPanel className="w-80 hidden md:flex flex-col p-4 border-l border-white/10 h-[80vh] sticky top-8">
