@@ -726,9 +726,14 @@ const Dashboard: React.FC = () => {
 
   const handleDeleteCategory = async (categoryId: string) => {
     if (window.confirm(t('deleteCategoryConfirm'))) {
-      await deleteCategory(categoryId);
-      if (roomConfig.category_id === categoryId) {
-        setRoomConfig(prev => ({ ...prev, category_id: '' }));
+      try {
+        await deleteCategory(categoryId);
+        if (roomConfig.category_id === categoryId) {
+          setRoomConfig(prev => ({ ...prev, category_id: '' }));
+        }
+      } catch (error) {
+        console.error("Failed to delete category:", error);
+        alert(t('categoryDeleteFailed'));
       }
     }
   };

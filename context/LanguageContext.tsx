@@ -179,6 +179,7 @@ const translations = {
     classCreateFailed: 'Class could not be created.',
     classDeleteFailed: 'Class could not be deleted.',
     classDeleteConfirm: 'Are you sure you want to delete this class and its student list?',
+    categoryDeleteFailed: 'Could not delete category. Please try again.',
     bannedCannotBeAdded: 'This user is banned and cannot be added to the class.',
     removeStudentConfirm: 'Are you sure you want to remove this student from the class?',
 
@@ -404,6 +405,7 @@ const translations = {
     classCreateFailed: 'Sınıf oluşturulamadı.',
     classDeleteFailed: 'Sınıf silinemedi.',
     classDeleteConfirm: 'Bu sınıfı ve içindeki öğrenci listesini silmek istediğinize emin misiniz?',
+    categoryDeleteFailed: 'Kategori silinemedi. Lütfen tekrar deneyin.',
     bannedCannotBeAdded: 'Bu kullanıcı banlı olduğu için sınıfa eklenemez.',
     removeStudentConfirm: 'Bu öğrenciyi sınıftan çıkarmak istediğinize emin misiniz?',
 

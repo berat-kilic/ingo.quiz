@@ -125,6 +125,11 @@ CREATE POLICY "Owners can update categories"
 ON public.categories FOR UPDATE TO authenticated 
 USING (auth.uid() = owner_id);
 
+-- Sahiplerin kendi kategorilerini silebilmesini sağla
+CREATE POLICY "Owners can delete their own categories"
+ON public.categories FOR DELETE TO authenticated
+USING (auth.uid() = owner_id);
+
 -- 4.4 TEACHER CLASSES POLİTİKALARI
 -- Sadece sınıfın sahibi görebilir ve yönetebilir
 CREATE POLICY "Teachers manage own classes" 
