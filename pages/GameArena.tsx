@@ -15,7 +15,7 @@ const GameArena: React.FC = () => {
   const { room, currentQuestion, timer, updateAnswer, nextQuestion, isHost, kickPlayer, timeExpired, leaveRoom } = useGame();
   const { user } = useAuth();
   const { t } = useLanguage();
-  const { playEffect, stopEffect, soundEffectsEnabled } = useAudio();
+  const { playEffect, stopEffect, soundEffectsVolume } = useAudio();
   const navigate = useNavigate();
 
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
@@ -57,7 +57,7 @@ const GameArena: React.FC = () => {
   }, [currentQuestion]);
 
   useEffect(() => {
-    if (!room || room.status !== 'playing' || !currentQuestion || timeExpired || !soundEffectsEnabled) {
+    if (!room || room.status !== 'playing' || !currentQuestion || timeExpired || soundEffectsVolume <= 0) {
       stopEffect('time');
       return;
     }
@@ -65,7 +65,7 @@ const GameArena: React.FC = () => {
     return () => {
       stopEffect('time');
     };
-  }, [currentQuestion?.id, playEffect, room?.status, soundEffectsEnabled, stopEffect, timeExpired]);
+  }, [currentQuestion?.id, playEffect, room?.status, soundEffectsVolume, stopEffect, timeExpired]);
 
   useEffect(() => {
     if (!room || room.status !== 'playing' || !timeExpired || !currentQuestion) return;

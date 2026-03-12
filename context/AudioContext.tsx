@@ -3,16 +3,16 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 type EffectName = 'click' | 'correct' | 'wrong' | 'time' | 'win';
 
 interface AudioContextType {
-  soundEffectsEnabled: boolean;
-  musicEnabled: boolean;
-  setSoundEffectsEnabled: (enabled: boolean) => void;
-  setMusicEnabled: (enabled: boolean) => void;
+  soundEffectsVolume: number;
+  musicVolume: number;
+  setSoundEffectsVolume: (volume: number) => void;
+  setMusicVolume: (volume: number) => void;
   playEffect: (name: EffectName, options?: { loop?: boolean; restart?: boolean }) => void;
   stopEffect: (name: EffectName) => void;
 }
 
-const SOUND_EFFECTS_KEY = 'ingo_sound_effects_enabled';
-const MUSIC_KEY = 'ingo_music_enabled';
+const SOUND_EFFECTS_VOL_KEY = 'ingo_sound_effects_volume';
+const MUSIC_VOLUME_KEY = 'ingo_music_volume';
 const MUSIC_TRACKS = ['m1', 'm2', 'm3', 'm4'];
 
 const effectSourceMap: Record<EffectName, string[]> = {
@@ -33,10 +33,11 @@ const effectVolumeMap: Record<EffectName, number> = {
 
 const AudioContext = createContext<AudioContextType | undefined>(undefined);
 
-const readStoredBoolean = (key: string, fallback: boolean) => {
+const readStoredVolume = (key: string, fallback: number) => {
   const raw = localStorage.getItem(key);
   if (raw === null) return fallback;
-  return raw === 'true';
+  const val = parseFloat(raw);
+  return isNaN(val) ? fallback : Math.max(0, Math.min(1, val));
 };
 
 const shuffle = <T,>(list: T[]): T[] => {
@@ -49,22 +50,26 @@ const shuffle = <T,>(list: T[]): T[] => {
 };
 
 export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [soundEffectsEnabled, setSoundEffectsEnabledState] = useState<boolean>(() => readStoredBoolean(SOUND_EFFECTS_KEY, true));
-  const [musicEnabled, setMusicEnabledState] = useState<boolean>(() => readStoredBoolean(MUSIC_KEY, true));
+  const [soundEffectsVolume, setSoundEffectsVolumeState] = useState<number>(() => readStoredVolume(SOUND_EFFECTS_VOL_KEY, 0.5));
+  const [musicVolume, setMusicVolumeState] = useState<number>(() => readStoredVolume(MUSIC_VOLUME_KEY, 0.35));
 
-  const musicEnabledRef = useRef(musicEnabled);
-  musicEnabledRef.current = musicEnabled;
+  const musicVolumeRef = useRef(musicVolume);
+  useEffect(() => { musicVolumeRef.current = musicVolume; }, [musicVolume]);
+
+  const hasInteractedRef = useRef(false);
 
   useEffect(() => {
     // Tarayıcıların otomatik oynatma politikaları nedeniyle, sesin başlayabilmesi için
     // kullanıcının sayfayla etkileşime girmesi gerekir. Bu fonksiyon, ilk etkileşimde
     // müzik ayarı açıksa müziği başlatır.
     const startMusicOnInteraction = () => {
-      if (musicEnabledRef.current) {
-        // Müziği çalan useEffect'i yeniden tetiklemek için
-        // musicEnabled state'ini kısaca değiştiriyoruz.
-        setMusicEnabledState(false);
-        setTimeout(() => setMusicEnabledState(true), 10);
+      hasInteractedRef.current = true;
+      if (musicRef.current && musicRef.current.paused && musicVolumeRef.current > 0) {
+        if (musicRef.current.src) {
+           musicRef.current.play().catch(() => playNextMusicTrack());
+        } else {
+           playNextMusicTrack();
+        }
       }
       // Listener'ları ilk etkileşimden sonra kaldırıyoruz ki tekrar çalışmasın.
       window.removeEventListener('click', startMusicOnInteraction);
@@ -78,7 +83,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       window.removeEventListener('click', startMusicOnInteraction);
       window.removeEventListener('keydown', startMusicOnInteraction);
     };
-  }, []); // Bu effect'in sadece uygulama ilk yüklendiğinde bir kez çalışmasını istiyoruz.
+  }, []); 
 
   const effectRefs = useRef<Record<EffectName, HTMLAudioElement | null>>({
     click: null,
@@ -106,15 +111,16 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const playEffect = useCallback(
     (name: EffectName, options?: { loop?: boolean; restart?: boolean }) => {
-      if (!soundEffectsEnabled) return;
+      if (soundEffectsVolume <= 0) return;
       const audio = getAudio(name);
       if (options?.restart) {
         audio.currentTime = 0;
       }
+      audio.volume = effectVolumeMap[name] * soundEffectsVolume;
       audio.loop = !!options?.loop;
       audio.play().catch(() => {});
     },
-    [getAudio, soundEffectsEnabled]
+    [getAudio, soundEffectsVolume]
   );
 
   const stopEffect = useCallback(
@@ -152,7 +158,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const playNextMusicTrack = useCallback(async () => {
-    if (!musicEnabled || musicStartingRef.current) return;
+    if (musicStartingRef.current) return;
     const audio = musicRef.current;
     if (!audio) return;
 
@@ -166,6 +172,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const supportsOgg = audio.canPlayType('audio/ogg') !== '';
     const src = supportsOgg ? `/audio/musics/${track}.ogg` : `/audio/musics/${track}.mp3`;
     audio.src = src;
+    audio.volume = musicVolumeRef.current;
     try {
       await audio.play();
     } catch (_) {
@@ -173,45 +180,45 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } finally {
       musicStartingRef.current = false;
     }
-  }, [musicEnabled, pickNextTrack]);
+  }, [pickNextTrack]);
 
   useEffect(() => {
-    localStorage.setItem(SOUND_EFFECTS_KEY, String(soundEffectsEnabled));
-    if (!soundEffectsEnabled) {
+    localStorage.setItem(SOUND_EFFECTS_VOL_KEY, String(soundEffectsVolume));
+    if (soundEffectsVolume <= 0) {
       stopAllEffects();
     }
-  }, [soundEffectsEnabled, stopAllEffects]);
+  }, [soundEffectsVolume, stopAllEffects]);
 
   useEffect(() => {
-    localStorage.setItem(MUSIC_KEY, String(musicEnabled));
-    if (!musicEnabled) {
-      stopMusic();
-      return;
+    localStorage.setItem(MUSIC_VOLUME_KEY, String(musicVolume));
+    if (musicRef.current) {
+      musicRef.current.volume = musicVolume;
+      // Mute'dan ses açıldığında ve etkileşim olmuşsa başlat
+      if (musicVolume > 0 && musicRef.current.paused && hasInteractedRef.current) {
+         if (!musicRef.current.src) playNextMusicTrack();
+         else musicRef.current.play().catch(() => playNextMusicTrack());
+      }
     }
-    playNextMusicTrack();
-  }, [musicEnabled, playNextMusicTrack, stopMusic]);
+  }, [musicVolume, playNextMusicTrack]);
 
   useEffect(() => {
     const audio = new Audio();
     audio.preload = 'auto';
-    audio.volume = 0.35;
+    audio.volume = musicVolume;
     audio.onended = () => {
-      if (musicEnabled) {
-        playNextMusicTrack();
-      }
+      playNextMusicTrack();
     };
     musicRef.current = audio;
 
-    if (musicEnabled) {
-      playNextMusicTrack();
-    }
+    // Otomatik başlatmayı dene (tarayıcı izin verirse çalışır)
+    playNextMusicTrack();
 
     return () => {
       audio.pause();
       audio.src = '';
       musicRef.current = null;
     };
-  }, [musicEnabled, playNextMusicTrack]);
+  }, [playNextMusicTrack]);
 
   useEffect(() => {
     const onMouseDown = () => {
@@ -228,24 +235,24 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, [playEffect]);
 
-  const setSoundEffectsEnabled = useCallback((enabled: boolean) => {
-    setSoundEffectsEnabledState(enabled);
+  const setSoundEffectsVolume = useCallback((volume: number) => {
+    setSoundEffectsVolumeState(volume);
   }, []);
 
-  const setMusicEnabled = useCallback((enabled: boolean) => {
-    setMusicEnabledState(enabled);
+  const setMusicVolume = useCallback((volume: number) => {
+    setMusicVolumeState(volume);
   }, []);
 
   const value = useMemo<AudioContextType>(
     () => ({
-      soundEffectsEnabled,
-      musicEnabled,
-      setSoundEffectsEnabled,
-      setMusicEnabled,
+      soundEffectsVolume,
+      musicVolume,
+      setSoundEffectsVolume,
+      setMusicVolume,
       playEffect,
       stopEffect,
     }),
-    [musicEnabled, playEffect, setMusicEnabled, setSoundEffectsEnabled, soundEffectsEnabled, stopEffect]
+    [musicVolume, playEffect, setMusicVolume, setSoundEffectsVolume, soundEffectsVolume, stopEffect]
   );
 
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;

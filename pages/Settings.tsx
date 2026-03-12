@@ -7,10 +7,92 @@ import { GlassPanel } from '../components/GlassPanel';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Volume2, Globe, Trash2, Music } from 'lucide-react';
 
+const VolumeSlider = ({ value, onChange, icon: Icon, label }: { value: number, onChange: (val: number) => void, icon: any, label: string }) => {
+  const handleWheel = (e: React.WheelEvent) => {
+    const delta = e.deltaY > 0 ? -0.05 : 0.05;
+    const newValue = Math.min(1, Math.max(0, value + delta));
+    onChange(Number(newValue.toFixed(2)));
+  };
+
+  return (
+  <div className="flex flex-col p-4 bg-base/50 rounded-xl gap-3" onWheel={handleWheel}>
+    <style>{`
+      .custom-slider {
+        -webkit-appearance: none;
+        appearance: none;
+        background: transparent;
+        cursor: pointer;
+        width: 100%;
+      }
+
+      /* Webkit (Chrome, Safari) track */
+      .custom-slider::-webkit-slider-runnable-track {
+        background: #374151; /* bg-gray-700 */
+        height: 8px;
+        border-radius: 8px;
+      }
+
+      /* Firefox track */
+      .custom-slider::-moz-range-track {
+        background: #374151; /* bg-gray-700 */
+        height: 8px;
+        border-radius: 8px;
+        border: none;
+      }
+
+      /* Webkit thumb */
+      .custom-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        margin-top: -4px; /* (track-height - thumb-height) / 2 */
+        background-color: #3b82f6; /* bg-primary */
+        height: 16px;
+        width: 16px;
+        cursor: pointer;
+        border-radius: 50%;
+        box-shadow: 0 0 2px rgba(0,0,0,0.5);
+      }
+
+      /* Firefox thumb */
+      .custom-slider::-moz-range-thumb {
+        border: none;
+        border-radius: 50%;
+        background-color: #3b82f6; /* bg-primary */
+        height: 16px;
+        width: 16px;
+        cursor: pointer;
+        box-shadow: 0 0 2px rgba(0,0,0,0.5);
+      }
+
+      /* Remove Firefox's dotted outline on focus */
+      .custom-slider::-moz-focus-outer {
+        border: 0;
+      }
+    `}</style>
+    <div className="flex items-center gap-3 text-gray-300">
+      <Icon className={`w-5 h-5 ${value === 0 ? 'text-gray-500' : 'text-gray-200'}`} />
+      <span className="font-medium">{label}</span>
+      <span className="ml-auto text-xs font-mono text-primary bg-primary/10 px-2 py-1 rounded min-w-[3rem] text-center">
+        {Math.round(value * 100)}%
+      </span>
+    </div>
+    <input
+      type="range"
+      min="0"
+      max="1"
+      step="0.01"
+      value={value}
+      onChange={(e) => onChange(parseFloat(e.target.value))}
+      className="custom-slider focus:outline-none focus:ring-2 focus:ring-primary/50"
+    />
+  </div>
+  );
+};
+
 const Settings: React.FC = () => {
   const { user, deleteAccount } = useAuth();
   const { language, setLanguage, t } = useLanguage();
-  const { soundEffectsEnabled, musicEnabled, setSoundEffectsEnabled, setMusicEnabled } = useAudio();
+  const { soundEffectsVolume, musicVolume, setSoundEffectsVolume, setMusicVolume } = useAudio();
   const navigate = useNavigate();
 
   const handleDelete = async () => {
@@ -25,19 +107,6 @@ const Settings: React.FC = () => {
   };
 
   if (!user) return null;
-
-  const Toggle = ({ enabled, onClick }: { enabled: boolean; onClick: () => void }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`w-10 h-6 rounded-full relative cursor-pointer transition-colors ${enabled ? 'bg-primary' : 'bg-gray-600'}`}
-      aria-pressed={enabled}
-    >
-      <div
-        className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${enabled ? 'right-1' : 'left-1'}`}
-      />
-    </button>
-  );
 
   return (
     <div className="min-h-screen p-4 max-w-3xl mx-auto">
@@ -59,22 +128,20 @@ const Settings: React.FC = () => {
                 <h3 className="font-bold mb-4 text-gray-400 uppercase text-xs tracking-wider">{t('preferences')}</h3>
                 <div className="space-y-4">
                     {/* Sound Effects */}
-                    <div className="flex items-center justify-between p-3 bg-base/50 rounded-xl">
-                        <div className="flex items-center gap-3">
-                            <Volume2 className="w-5 h-5 text-gray-400" />
-                            <span>{t('soundEffects')}</span>
-                        </div>
-                        <Toggle enabled={soundEffectsEnabled} onClick={() => setSoundEffectsEnabled(!soundEffectsEnabled)} />
-                    </div>
+                    <VolumeSlider 
+                      label={t('soundEffects')} 
+                      icon={Volume2} 
+                      value={soundEffectsVolume} 
+                      onChange={setSoundEffectsVolume} 
+                    />
 
                     {/* Music */}
-                    <div className="flex items-center justify-between p-3 bg-base/50 rounded-xl">
-                        <div className="flex items-center gap-3">
-                            <Music className="w-5 h-5 text-gray-400" />
-                            <span>{t('music')}</span>
-                        </div>
-                        <Toggle enabled={musicEnabled} onClick={() => setMusicEnabled(!musicEnabled)} />
-                    </div>
+                    <VolumeSlider 
+                      label={t('music')} 
+                      icon={Music} 
+                      value={musicVolume} 
+                      onChange={setMusicVolume} 
+                    />
 
                     {/* Language */}
                     <div className="flex items-center justify-between p-3 bg-base/50 rounded-xl">
