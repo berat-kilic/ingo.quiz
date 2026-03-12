@@ -6,12 +6,12 @@ import { useLanguage } from '../context/LanguageContext';
 import { GlassPanel } from '../components/GlassPanel';
 import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
-import { Trophy, Zap, Plus, LogOut, Settings as SettingsIcon, Crown, Edit, Loader2, Bell, X, Check, Search } from 'lucide-react';
+import { Trophy, Zap, Plus, LogOut, Settings as SettingsIcon, Crown, Edit, Loader2, Bell, X, Check, Search, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Category, Question, TeacherClass, Profile as UserProfile, QuestionType } from '../types';
 import { supabase } from '../lib/supabase';
 
-type CategoryModeUI = 'multiple-choice' | 'text' | 'dictionary';
+type CategoryModeUI = 'text' | 'dictionary';
 
 type CategoryDraft = {
   name: string;
@@ -126,9 +126,11 @@ const clearDictionaryText = async (key: string) => {
   }
 };
 
+const MAX_CATEGORY_NAME_LENGTH = 20;
+
 const Dashboard: React.FC = () => {
   const { user, signOut } = useAuth();
-  const { createRoom, joinRoom, addCategory, updateCategory, categories, getLeaderboard, getClasses, resolveClassRequest } = useGame();
+  const { createRoom, joinRoom, addCategory, updateCategory, deleteCategory, categories, getLeaderboard, getClasses, resolveClassRequest } = useGame();
   const { t } = useLanguage();
   const navigate = useNavigate();
   
@@ -162,12 +164,21 @@ const Dashboard: React.FC = () => {
       mode: 'text',
       questions: []
   });
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [tempQuestion, setTempQuestion] = useState({
       text: '',
       correct: '',
+      type: 'text' as QuestionType,
       w1: '', w2: '', w3: ''
   });
   const [dictionaryText, setDictionaryText] = useState('');
+
+  // Seçili kategorinin soru sayısını bulmak için memo
+  const selectedCategoryQuestionCount = useMemo(() => {
+    const selectedCat = categories.find(c => c.id === roomConfig.category_id);
+    return selectedCat ? selectedCat.questions.length : 0;
+  }, [roomConfig.category_id, categories]);
+
   const [dictionaryFileName, setDictionaryFileName] = useState('');
   const [dictionaryError, setDictionaryError] = useState('');
   const [dictionaryLoading, setDictionaryLoading] = useState(false);
@@ -442,33 +453,59 @@ const Dashboard: React.FC = () => {
       if(!tempQuestion.text || !tempQuestion.correct) return;
       if (isDictionaryMode(newCategory.mode)) return;
 
-      const effectiveType: QuestionType = isDictionaryMode(newCategory.mode) ? 'text' : newCategory.mode;
+      const effectiveType: QuestionType = tempQuestion.type;
       const q: Question = {
-          id: Math.random().toString(36),
+          id: editingQuestionId || Math.random().toString(36),
           text: tempQuestion.text,
           correctAnswer: tempQuestion.correct,
           type: effectiveType,
-          options: effectiveType === 'multiple-choice' 
+          options: effectiveType === 'multiple-choice'
             ? [tempQuestion.correct, tempQuestion.w1, tempQuestion.w2, tempQuestion.w3]
             : undefined
       };
       
-      setNewCategory(prev => ({ ...prev, questions: [...prev.questions, q] }));
-      setTempQuestion({ text: '', correct: '', w1: '', w2: '', w3: '' });
+      if (editingQuestionId) {
+          setNewCategory(prev => ({
+              ...prev,
+              questions: prev.questions.map(item => item.id === editingQuestionId ? q : item)
+          }));
+          setEditingQuestionId(null);
+      } else {
+          setNewCategory(prev => ({ ...prev, questions: [...prev.questions, q] }));
+      }
+      
+      setTempQuestion({ ...tempQuestion, text: '', correct: '', w1: '', w2: '', w3: '' });
+  };
+
+  const handleEditQuestion = (q: Question) => {
+      setEditingQuestionId(q.id);
+      setTempQuestion({
+          text: q.text,
+          correct: q.correctAnswer,
+          type: q.type,
+          w1: q.options?.[1] || '',
+          w2: q.options?.[2] || '',
+          w3: q.options?.[3] || '',
+      });
   };
 
   const removeQuestion = (qId: string) => {
+      if (editingQuestionId === qId) {
+          setEditingQuestionId(null);
+          setTempQuestion({ ...tempQuestion, text: '', correct: '', w1: '', w2: '', w3: '' });
+      }
       setNewCategory(prev => ({...prev, questions: prev.questions.filter(q => q.id !== qId)}));
   };
 
   const handleSaveCategory = async () => {
       if(!newCategory.name || newCategory.questions.length === 0) return;
 
-      const finalMode: QuestionType = isDictionaryMode(newCategory.mode) ? 'text' : newCategory.mode;
+      // Veritabanı kısıtlamasına takılmamak ve esneklik sağlamak için her zaman 'text' olarak kaydediyoruz.
+      const dbMode: QuestionType = 'text';
+
       const normalizedQuestions = newCategory.questions.map(q => ({
         ...q,
-        type: finalMode,
-        options: finalMode === 'multiple-choice' ? q.options : undefined
+        options: q.type === 'multiple-choice' ? q.options : undefined
       }));
 
       if (editingCategoryId) {
@@ -476,20 +513,21 @@ const Dashboard: React.FC = () => {
               id: editingCategoryId,
               name: newCategory.name,
               owner_id: user?.id || '',
-              mode: finalMode,
+              mode: dbMode,
               questions: normalizedQuestions
           };
           await updateCategory(updatedCat);
       } else {
           const cat: any = {
               name: newCategory.name,
-              mode: finalMode,
+              mode: dbMode,
               questions: normalizedQuestions
           };
           await addCategory(cat);
       }
 
       setIsCategoryModalOpen(false);
+      setEditingQuestionId(null);
       setIsRoomModalOpen(true); 
       setEditingCategoryId(null);
       setNewCategory({ name: '', mode: 'text', questions: [] });
@@ -533,7 +571,7 @@ const Dashboard: React.FC = () => {
     }
     saveDictionaryText(dictionaryStorageKey, safeText);
     const parsed = parseDictionaryText(safeText);
-    setNewCategory(prev => ({ ...prev, questions: parsed.questions }));
+    setNewCategory(prev => ({ ...prev, questions: [...prev.questions, ...parsed.questions] }));
     if (parsed.skipped > 0) {
       setDictionaryError(formatTemplate(t('dictionarySomeLinesSkipped'), { count: parsed.skipped }));
     } else {
@@ -684,6 +722,15 @@ const Dashboard: React.FC = () => {
       setHighlightSelfRow(false);
       highlightTimeoutRef.current = null;
     }, 700);
+  };
+
+  const handleDeleteCategory = async (categoryId: string) => {
+    if (window.confirm(t('deleteCategoryConfirm'))) {
+      await deleteCategory(categoryId);
+      if (roomConfig.category_id === categoryId) {
+        setRoomConfig(prev => ({ ...prev, category_id: '' }));
+      }
+    }
   };
 
   return (
@@ -968,13 +1015,23 @@ const Dashboard: React.FC = () => {
                         onChange={(e) => setRoomConfig({...roomConfig, category_id: e.target.value})}
                     >
                         <option value="">-- {t('selectCategory')} --</option>
-                        {categories.map(c => <option key={c.id} value={c.id}>{c.name} ({c.questions.length} {t('questionsCount')})</option>)}
+                        {categories.map(c => {
+                            const displayName = c.name.length > MAX_CATEGORY_NAME_LENGTH
+                                ? c.name.substring(0, MAX_CATEGORY_NAME_LENGTH) + '...'
+                                : c.name;
+                            return <option key={c.id} value={c.id}>{displayName}</option>
+                        })}
                     </select>
                     <div className="flex gap-1">
                         {roomConfig.category_id && (
                              <Button variant="secondary" size="sm" onClick={() => handleEditCategory(roomConfig.category_id)}>
                                  <Edit className="w-4 h-4" />
                              </Button>
+                        )}
+                        {roomConfig.category_id && (
+                            <Button variant="danger" size="sm" onClick={() => handleDeleteCategory(roomConfig.category_id)}>
+                                <Trash2 className="w-4 h-4" />
+                            </Button>
                         )}
                         <Button variant="ghost" size="sm" onClick={() => { 
                             setEditingCategoryId(null);
@@ -994,7 +1051,12 @@ const Dashboard: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">{t('questionCount')}</label>
+                    <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">
+                        {t('questionCount')}
+                        {roomConfig.category_id && selectedCategoryQuestionCount > 0 && (
+                            <span className="ml-2 text-primary">({selectedCategoryQuestionCount})</span>
+                        )}
+                    </label>
                     <input 
                         type="number" 
                         className="w-full bg-base border border-white/10 rounded-xl p-3 text-center font-bold"
@@ -1038,8 +1100,7 @@ const Dashboard: React.FC = () => {
                      value={newCategory.mode}
                      onChange={(e) => setNewCategory({...newCategory, mode: e.target.value as any})}
                 >
-                    <option value="text">{t('modeClassic')}</option>
-                    <option value="multiple-choice">{t('modeMulti')}</option>
+                    <option value="text">{t('modeManual')}</option>
                     <option value="dictionary">{t('modeDictionary')}</option>
                 </select>
              </div>
@@ -1050,9 +1111,14 @@ const Dashboard: React.FC = () => {
                  {newCategory.questions.map((q, idx) => (
                      <div key={q.id || idx} className="flex justify-between items-center bg-white/5 p-2 rounded-lg text-sm">
                          <span className="truncate flex-1 mr-2">{q.text}</span>
-                         <button onClick={() => removeQuestion(q.id)} className="text-danger hover:bg-danger/10 p-1 rounded">
-                             <LogOut className="w-3 h-3 rotate-180" />
-                         </button>
+                         <div className="flex gap-1">
+                            <button onClick={() => handleEditQuestion(q)} className="text-primary hover:bg-primary/10 p-1 rounded transition-colors" title={t('editQuestion')}>
+                                <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => removeQuestion(q.id)} className="text-danger hover:bg-danger/10 p-1 rounded transition-colors">
+                                <LogOut className="w-3.5 h-3.5 rotate-180" />
+                            </button>
+                         </div>
                      </div>
                  ))}
              </div>
@@ -1073,7 +1139,6 @@ const Dashboard: React.FC = () => {
                          className="absolute inset-0 opacity-0 cursor-pointer"
                          onPointerDown={markDictionaryFilePickStarted}
                          onChange={handleDictionaryFileUpload}
-                         onInput={handleDictionaryFileUpload as any}
                        />
                      </div>
                      {dictionaryLoading && (
@@ -1102,7 +1167,19 @@ const Dashboard: React.FC = () => {
                  </div>
              ) : (
                  <div className="p-4 bg-white/5 rounded-xl border border-white/10 space-y-3">
-                     <h4 className="font-bold text-sm text-primary">{t('newQuestion')}</h4>
+                     <h4 className="font-bold text-sm text-primary">{editingQuestionId ? t('editQuestion') : t('newQuestion')}</h4>
+                     {newCategory.mode === 'text' && (
+                        <div className="flex gap-2 mb-2">
+                            <button 
+                                onClick={() => setTempQuestion({...tempQuestion, type: 'text'})}
+                                className={`flex-1 py-1 text-xs rounded-lg border transition-all ${tempQuestion.type === 'text' ? 'bg-primary border-primary text-white' : 'border-white/10 text-gray-400'}`}
+                            >{t('typeClassic')}</button>
+                            <button 
+                                onClick={() => setTempQuestion({...tempQuestion, type: 'multiple-choice'})}
+                                className={`flex-1 py-1 text-xs rounded-lg border transition-all ${tempQuestion.type === 'multiple-choice' ? 'bg-primary border-primary text-white' : 'border-white/10 text-gray-400'}`}
+                            >{t('typeMulti')}</button>
+                        </div>
+                     )}
                      <input 
                         type="text" 
                         placeholder={t('questionText')}
@@ -1115,10 +1192,10 @@ const Dashboard: React.FC = () => {
                         placeholder={t('answerText')}
                         className="w-full bg-base border border-green-500/30 rounded-lg p-2 text-sm"
                         value={tempQuestion.correct}
-                        onChange={(e) => setTempQuestion({...tempQuestion, correct: e.target.value})}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTempQuestion({...tempQuestion, correct: e.target.value})}
                      />
                      
-                     {newCategory.mode === 'multiple-choice' && (
+                     {newCategory.mode === 'text' && tempQuestion.type === 'multiple-choice' && (
                          <div className="grid grid-cols-3 gap-2">
                              <input type="text" placeholder={t('wrongOption1')} className="bg-base border border-danger/30 rounded p-2 text-xs" value={tempQuestion.w1} onChange={e => setTempQuestion({...tempQuestion, w1: e.target.value})} />
                              <input type="text" placeholder={t('wrongOption2')} className="bg-base border border-danger/30 rounded p-2 text-xs" value={tempQuestion.w2} onChange={e => setTempQuestion({...tempQuestion, w2: e.target.value})} />
@@ -1126,7 +1203,15 @@ const Dashboard: React.FC = () => {
                          </div>
                      )}
 
-                     <Button size="sm" fullWidth onClick={handleAddQuestion}>{t('addQuestion')}</Button>
+                     <div className="flex gap-2">
+                        <Button size="sm" className="flex-1" onClick={handleAddQuestion}>{editingQuestionId ? t('saveChanges') : t('addQuestion')}</Button>
+                        {editingQuestionId && (
+                            <Button size="sm" variant="secondary" onClick={() => {
+                                setEditingQuestionId(null);
+                                setTempQuestion({ ...tempQuestion, text: '', correct: '', w1: '', w2: '', w3: '' });
+                            }}>{t('cancel')}</Button>
+                        )}
+                     </div>
                  </div>
              )}
              

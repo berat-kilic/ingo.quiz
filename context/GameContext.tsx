@@ -37,8 +37,8 @@ const scoreByPtestAlgorithm = (playerRaw: string, correctRaw: string): number =>
 
     if (d === k) continue;
     if (d.toLowerCase() === k.toLowerCase()) continue;
-    if ((d === 'I' && k === 'ý') || (k === 'I' && d === 'ý')) continue;
-    if ((d === 'Ý' && k === 'i') || (k === 'Ý' && d === 'i')) continue;
+    if ((d === 'I' && k === 'ï¿½') || (k === 'I' && d === 'ï¿½')) continue;
+    if ((d === 'ï¿½' && k === 'i') || (k === 'ï¿½' && d === 'i')) continue;
 
     wrongCount += 1;
   }
@@ -106,6 +106,7 @@ interface GameContextType {
   getClasses: () => Promise<TeacherClass[]>;
   createClass: (name: string) => Promise<TeacherClass | null>;
   deleteClass: (id: string) => Promise<{ error: any }>;
+  deleteCategory: (id: string) => Promise<void>;
   addStudentToClass: (classId: string, students: any[]) => Promise<void>;
   removeStudentFromClass: (classId: string, studentId: string, currentStudents: any[]) => Promise<void>;
   toggleBan: (studentId: string, currentStatus: boolean) => Promise<void>;
@@ -737,6 +738,16 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { error };
   };
 
+  const deleteCategory = async (id: string) => {
+    if (!user) return;
+    const { error } = await supabase.from('categories').delete().eq('id', id).eq('owner_id', user.id);
+    if (!error) {
+      setCategories(prev => prev.filter(c => c.id !== id));
+    } else {
+      console.error("Error deleting category:", error);
+    }
+  };
+
   const addStudentToClass = async (classId: string, students: any[]) => {
       const { error } = await supabase.from('teacher_classes').update({ students: students }).eq('id', classId);
       if(error) console.error("Error adding student:", error);
@@ -827,7 +838,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <GameContext.Provider value={{ 
       room, questions, currentQuestion, timer, isHost, categories, timeExpired,
-      joinRoom, createRoom, addCategory, updateCategory, startGame, updateAnswer, leaveRoom, kickPlayer, banPlayer, nextQuestion, getLeaderboard, searchStudent,
+      joinRoom, createRoom, addCategory, updateCategory, deleteCategory, startGame, updateAnswer, leaveRoom, kickPlayer, banPlayer, nextQuestion, getLeaderboard, searchStudent,
       getClasses, createClass, deleteClass, addStudentToClass, removeStudentFromClass, toggleBan,
       searchTeacher, getTeacherClassesPublic, requestJoinClass, resolveClassRequest, getMyStudentClasses
     }}>
